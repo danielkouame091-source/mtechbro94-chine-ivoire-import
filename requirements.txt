@@ -1,1 +1,2 @@
-echo "flask" > requirements.txt
+flask
+gunicorn
