@@ -1,6 +1,10 @@
-reportlab>=3.6.0
-streamlit>=1.38.0
-pandas>=2.2.0
-requests>=2.31.0
-groq>=0.10.0
-python-dotenv>=1.0.1
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+.streamlit/secrets.toml
+*.db
+uploads_dossiers/
+*.pdf
+.DS_Store
