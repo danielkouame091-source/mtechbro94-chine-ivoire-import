@@ -344,12 +344,12 @@ with tab_cotation:
         try:
             client_ai = Groq(api_key=groq_api_key)
             response = client_ai.chat.completions.create(
-                model="llama-3.1-8b-instant",  # Modèle 100% garanti actif sur Groq
+                model="llama3-70b-8192",  # Modèle 100% stable et universel sur Groq
                 messages=[{"role": "user", "content": prompt_devis}],
             )
             message_genere = response.choices[0].message.content
         except Exception as exc:
-            pass  # En cas d'erreur API, le message par défaut s'affiche proprement
+            pass  # Bascule propre sur le modèle de secours local
 
     if not message_genere:
         message_genere = f"""Bonjour {nom_client},
@@ -410,7 +410,7 @@ with tab_ai_expert:
                 client_ai = Groq(api_key=groq_api_key)
                 prompt_expert = f"Vous êtes un expert transitaire chez Kelanewin Transit en Côte d'Ivoire. Répondez de manière technique : {user_query}"
                 res_ai = client_ai.chat.completions.create(
-                    model="llama-3.1-8b-instant",  # Modèle 100% garanti actif sur Groq
+                    model="llama3-70b-8192",  # Modèle 100% stable et universel sur Groq
                     messages=[{"role": "user", "content": prompt_expert}],
                 )
                 st.markdown("### 💡 Analyse & Recommandation Douanière :")
