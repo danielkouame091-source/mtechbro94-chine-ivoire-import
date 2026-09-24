@@ -583,7 +583,7 @@ with tab_crm:
 # =========================================================
 with tab_ai_expert:
     st.markdown('<div class="ai-box-3d">', unsafe_allow_html=True)
-    st.subheader("🤖 Assistant Expert Kelanewin Transit (Groq Llama 3.1)")
+    st.subheader("🤖 Assistant Expert Kelanewin Transit (Groq Llama 3.3)")
     user_query = st.text_area("Posez votre question sur les procédures douanières ivoiriennes (SYDAM, GUCE, régimes suspensifs...)")
 
     if st.button("🔍 Interroger l'Expert"):
@@ -592,7 +592,7 @@ with tab_ai_expert:
                 client_ai = Groq(api_key=groq_api_key)
                 prompt_expert = f"Vous êtes un expert transitaire en Côte d'Ivoire. Répondez précisément : {user_query}"
                 res_ai = client_ai.chat.completions.create(
-                    model="llama-3.1-70b-versatile",
+                    model="llama-3.3-70b-versatile",
                     messages=[{"role": "user", "content": prompt_expert}],
                 )
                 st.info(res_ai.choices[0].message.content)
