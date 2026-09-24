@@ -2,6 +2,7 @@ import os
 from urllib.parse import urlencode
 
 import pandas as pd
+import requests
 import streamlit as st
 
 try:
@@ -108,6 +109,29 @@ st.markdown(
 )
 
 # =========================================================
+# FONCTION DE RÉCUPÉRATION AUTOMATIQUE DES TAUX DE CHANGE
+# =========================================================
+@st.cache_data(ttl=3600)  # Mise à jour automatique toutes les heures
+def obtenir_taux_change_automatique():
+    default_cny_xof = 82.0
+    default_usd_xof = 610.0
+    status_msg = "Valeurs par défaut"
+    try:
+        url = "https://open.er-api.com/v6/latest/USD"
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            rates = response.json().get("rates", {})
+            usd_xof = rates.get("XOF", default_usd_xof)
+            usd_cny = rates.get("CNY", 7.2)
+            cny_xof = usd_xof / usd_cny if usd_cny else default_cny_xof
+            return round(cny_xof, 2), round(usd_xof, 2), "🟢 Taux direct API (Temps réel)"
+    except Exception:
+        pass
+    return default_cny_xof, default_usd_xof, "⚠️ Mode secours (Hors ligne)"
+
+taux_cny_auto, taux_usd_auto, status_api_devises = obtenir_taux_change_automatique()
+
+# =========================================================
 # BASE DE DONNÉES TARIF D'USAGE (TEC UEMOA / CI SYDAM WORLD)
 # =========================================================
 DATABASE_ARTICLES = {
@@ -171,10 +195,12 @@ st.sidebar.markdown("---")
 # Clé API Groq
 groq_api_key = st.sidebar.text_input("🔑 Clé API Groq", value="Kelane0777@", type="password")
 
-# Taux de Change
-st.sidebar.subheader("💱 Taux de Change du Jour")
-taux_cny_xof = st.sidebar.number_input("1 CNY -> FCFA", value=82.0, step=0.5)
-taux_usd_xof = st.sidebar.number_input("1 USD -> FCFA", value=610.0, step=1.0)
+# Taux de Change Automatisés
+st.sidebar.subheader("💱 Taux de Change Automatiques")
+st.sidebar.caption(status_api_devises)
+
+taux_cny_xof = st.sidebar.number_input("1 CNY -> FCFA", value=taux_cny_auto, step=0.1)
+taux_usd_xof = st.sidebar.number_input("1 USD -> FCFA", value=taux_usd_auto, step=1.0)
 
 # Paramètres Portuaires
 st.sidebar.subheader("⚓ Options Logistiques")
