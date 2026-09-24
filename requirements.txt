@@ -1,7 +1,66 @@
-reportlab
-streamlit
-pandas
-requests
-groq
-psycopg2-binary
-python-dotenv
+# China–Côte d'Ivoire Import & Export
+
+Application Streamlit de gestion documentaire, cotation douanière et suivi de dossiers pour le commerce import/export Chine–Côte d'Ivoire.
+
+## Prérequis
+
+- Python 3.10+
+- pip
+
+## Installation locale
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+## Variables d'environnement / secrets
+
+Vous pouvez sécuriser les identifiants et les accès API via variables d'environnement ou Streamlit secrets.
+
+Exemples :
+
+```bash
+export APP_ADMIN_PASSWORD="votre_mot_de_passe_admin"
+export APP_COMMERCIAL_PASSWORD="votre_mot_de_passe_commercial"
+export APP_COMPTABLE_PASSWORD="votre_mot_de_passe_comptable"
+export GROQ_API_KEY="votre_cle_groq"
+export SMTP_SERVER="smtp.gmail.com"
+export SMTP_PORT="587"
+export SMTP_USERNAME="expediteur@gmail.com"
+export SMTP_PASSWORD="votre_mot_de_passe_application"
+```
+
+Ou dans `.streamlit/secrets.toml` :
+
+```toml
+GROQ_API_KEY = "votre_cle_groq"
+APP_ADMIN_PASSWORD = "admin_password"
+APP_COMMERCIAL_PASSWORD = "commercial_password"
+APP_COMPTABLE_PASSWORD = "comptable_password"
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = "587"
+SMTP_USERNAME = "expediteur@gmail.com"
+SMTP_PASSWORD = "mot_de_passe_application"
+```
+
+## Structure du projet
+
+- `app.py` : application principale Streamlit
+- `requirements.txt` : dépendances Python
+- `actualiser_tarif.py` : script de mise à jour de la grille tarifaire
+- `schema.sql` : schéma SQLite / base de données
+- `uploads_dossiers/` : pièces jointes téléchargées
+- `transit_enterprise.db` : base SQLite locale
+
+## Démarrage
+
+```bash
+streamlit run app.py
+```
+
+## Remarque
+
+Le projet doit être démarré via Streamlit. Ne pas utiliser Flask, Gunicorn, ni un port 5000 pour le lancement local.

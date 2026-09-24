@@ -1,58 +1,11 @@
-<!DOCTYPE html>
-<html lang="fr">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>China–Côte d'Ivoire Import & Export</title>
-    <style>
-      body {
-        margin: 0;
-        font-family: Arial, sans-serif;
-        background: #0b1220;
-        color: #e5e7eb;
-        display: grid;
-        place-items: center;
-        min-height: 100vh;
-      }
-      .card {
-        max-width: 760px;
-        padding: 2rem 2.5rem;
-        border-radius: 16px;
-        background: rgba(15, 23, 42, 0.9);
-        border: 1px solid rgba(148, 163, 184, 0.3);
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
-      }
-      h1 {
-        margin-top: 0;
-        font-size: clamp(2rem, 4vw, 3rem);
-      }
-      code {
-        background: #111827;
-        padding: 0.2rem 0.5rem;
-        border-radius: 6px;
-      }
-      a {
-        color: #7dd3fc;
-      }
-    </style>
-  </head>
-  <body>
-    <main class="card">
-      <h1>China–Côte d'Ivoire Import & Export</h1>
-      <p>
-        Ce dépôt contient une application Streamlit pour la gestion de cotation,
-        de suivi douanier et d'import/export Chine–Côte d'Ivoire.
-      </p>
-      <p>
-        Pour lancer l'application localement :
-        <code>pip install -r requirements.txt</code><br />
-        <code>streamlit run app.py</code>
-      </p>
-      <p>
-        <a href="https://github.com/danielkouame091-source/mtechbro94-chine-ivoire-import">
-          Voir le dépôt GitHub
-        </a>
-      </p>
-    </main>
-  </body>
-</html>
+# Exemple de fichier de secrets Streamlit
+# Copier ce fichier vers .streamlit/secrets.toml
+
+GROQ_API_KEY = "votre_cle_groq"
+APP_ADMIN_PASSWORD = "transit2026"
+APP_COMMERCIAL_PASSWORD = "compta2026"
+APP_COMPTABLE_PASSWORD = "finance2026"
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = "587"
+SMTP_USERNAME = "expediteur@gmail.com"
+SMTP_PASSWORD = "votre_mot_de_passe_application"
