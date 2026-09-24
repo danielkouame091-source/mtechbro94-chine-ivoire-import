@@ -13,7 +13,7 @@ except ImportError:
 # CONFIGURATION ET STYLES CSS ULTRA-PROFESSIONNELS (3D & GLASSMORPHISM)
 # =========================================================
 st.set_page_config(
-    page_title="SYDAM Pro Transit CI - Dashboard Expert",
+    page_title="Kelanewin Transit - SYDAM Pro CI",
     page_icon="🇨🇮",
     layout="wide",
 )
@@ -111,6 +111,15 @@ st.markdown(
 # BASE DE DONNÉES TARIF D'USAGE (TEC UEMOA / CI SYDAM WORLD)
 # =========================================================
 DATABASE_ARTICLES = {
+    # --- MATÉRIEL DE TOPOGRAPHIE & MESURE DE PRÉCISION ---
+    "Station Totale Topographique & GNSS/GPS": {"sh": "9015.80.00", "dd": 5.0, "cat": "Topographie"},
+    "Théodolites, Niveaux Optiques & Laser": {"sh": "9015.10.00", "dd": 5.0, "cat": "Topographie"},
+    "Accessoires Topo (Mires, Trépieds, Cannes, Prismes)": {"sh": "9015.90.00", "dd": 5.0, "cat": "Topographie"},
+
+    # --- PELUCHES, JOUETS & ENFANTS ---
+    "Peluches & Doudou Rembourrés": {"sh": "9503.00.41", "dd": 20.0, "cat": "Jouets"},
+    "Jouets Électroniques & Figurines Plastique": {"sh": "9503.00.70", "dd": 20.0, "cat": "Jouets"},
+
     # --- VÉLOS, TRICYCLES & MOBILITÉ ---
     "Vélos & Bicyclettes (Non motorisés)": {"sh": "8712.00.00", "dd": 20.0, "cat": "Véhicules"},
     "Vélos Électriques & VAE": {"sh": "8711.60.00", "dd": 20.0, "cat": "Véhicules"},
@@ -154,39 +163,39 @@ DATABASE_ARTICLES = {
 # =========================================================
 # BARRE LATÉRALE - PROFIL EXPERT & CONFIGURATION DEVISE
 # =========================================================
-st.sidebar.title("🇨🇮 KOUASSI EXPRESS TRANSIT")
+st.sidebar.title("🇨🇮 KELANEWIN TRANSIT")
 st.sidebar.caption("Système Expert SYDAM World & GUCE CI")
 
 st.sidebar.markdown("---")
 
-# Clé API OpenAI
-openai_api_key = st.sidebar.text_input("🔑 Clé API OpenAI (ChatGPT)", type="password")
+# Clé API OpenAI préremplie avec ta clé
+openai_api_key = st.sidebar.text_input("🔑 Clé API OpenAI (ChatGPT)", value="Kelane0777@", type="password")
 
 # Taux de Change
 st.sidebar.subheader("💱 Taux de Change du Jour")
 taux_cny_xof = st.sidebar.number_input("1 CNY -> FCFA", value=82.0, step=0.5)
 taux_usd_xof = st.sidebar.number_input("1 USD -> FCFA", value=610.0, step=1.0)
 
-# Paramètres Portuaires & BTA
+# Paramètres Portuaires
 st.sidebar.subheader("⚓ Options Logistiques")
 mode_transport = st.sidebar.selectbox("Mode de Transport", ["Maritime (FCL/LCL)", "Aérien Express"])
 assurance_rate = st.sidebar.number_input("Taux Assurance CAF (%)", value=0.5, step=0.1) / 100
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("💡 **Support Transitaire :**\n*Tel:* +225 07 00 00 00 00\n*Abidjan Port-Bouët / San-Pédro*")
+st.sidebar.markdown("💡 **Support Kelanewin Transit :**\n*Tel:* +225 07 00 00 00 00\n*Abidjan / San-Pédro*")
 
 # =========================================================
 # ENTÊTE PRINCIPALE
 # =========================================================
 st.markdown("""
 <div class="header-banner">
-    <h1>📦 KOUASSI EXPRESS TRANSIT : COTATION & DÉDOUANEMENT CI</h1>
+    <h1>📦 KELANEWIN TRANSIT : COTATION & DÉDOUANEMENT CI</h1>
     <p>Calculateur Officiel SYDAM World, Tarifs UEMOA (TEC) & Générateur AI de Devis Client</p>
 </div>
 """, unsafe_allow_html=True)
 
 # =========================================================
-# ONGLET PRINCIPAL - NAVIGATION
+# NAVIGATION PAR ONGLETS
 # =========================================================
 tab_cotation, tab_ai_expert, tab_base_sh = st.tabs([
     "📊 Cotation & Calcul Douanier", 
@@ -224,13 +233,13 @@ with tab_cotation:
         
         m1, m2, m3 = st.columns(3)
         with m1:
-            quantite = st.number_input("Quantité d'unités", min_value=1, value=100, step=1)
+            quantite = st.number_input("Quantité d'unités", min_value=1, value=50, step=1)
         with m2:
-            prix_unitaire_devise = st.number_input(f"Prix Unitaire ({devise_facture.split()[0]})", min_value=0.01, value=150.0, step=5.0)
+            prix_unitaire_devise = st.number_input(f"Prix Unitaire ({devise_facture.split()[0]})", min_value=0.01, value=300.0, step=5.0)
         with m3:
-            fret_devise = st.number_input(f"Frais de Fret Total ({devise_facture.split()[0]})", min_value=0.0, value=2000.0, step=50.0)
+            fret_devise = st.number_input(f"Frais de Fret Total ({devise_facture.split()[0]})", min_value=0.0, value=1500.0, step=50.0)
 
-        # Calcul du Montant Marchandise FOB en Devise
+        # Calcul du Montant Marchandise FOB
         fob_devise = quantite * prix_unitaire_devise
         st.markdown(f"👉 **Montant Total Marchandise (FOB) :** `{fob_devise:,.2f} {devise_facture.split()[0]}`")
 
@@ -265,7 +274,7 @@ with tab_cotation:
     st.markdown('</div>', unsafe_allow_html=True)
 
     # =========================================================
-    # ALGORITHME DE CALCUL CONFORME SYDAM WORLD & UEMOA
+    # ALGORITHME DE CALCUL SYDAM WORLD & UEMOA
     # =========================================================
     taux_conversion = taux_cny_xof if "CNY" in devise_facture else taux_usd_xof
     
@@ -274,11 +283,11 @@ with tab_cotation:
     fob_xof = fob_devise * taux_conversion
     fret_xof = fret_devise * taux_conversion
     
-    # Assurance & CAF (Coût, Assurance, Fret)
+    # Assurance & CAF
     assurance_xof = (fob_xof + fret_xof) * assurance_rate
     caf_xof = fob_xof + fret_xof + assurance_xof
 
-    # Taux de Droits Douaniers : DD + RSE(1%) + PCS(0.8%) + PC(0.5%) + PFI(1.0%)
+    # Droits & Redevances (DD + RSE + PCS + PC + PFI)
     taux_dd = item_info["dd"] / 100.0
     taux_redevances = 0.010 + 0.008 + 0.005 + 0.010
     total_taux_droits = taux_dd + taux_redevances
@@ -308,7 +317,6 @@ with tab_cotation:
 
     st.markdown("<br/>", unsafe_allow_html=True)
 
-    # Tableau Récapitulatif
     df_detail = pd.DataFrame([{
         "Désignation Article": article_nom,
         "Code SH": item_info["sh"],
@@ -331,26 +339,22 @@ with tab_cotation:
     st.subheader("🤖 5. Génération Automatique du Devis Client")
 
     prompt_devis = f"""
-    Vous êtes un expert transitaire agréé en Côte d'Ivoire travaillant pour la société Kouassi Express Transit.
-    Rédigez un message professionnel, clair et courtois destiné au client {nom_client}.
+    Vous êtes un expert transitaire de la société Kelanewin Transit en Côte d'Ivoire.
+    Rédigez un message professionnel et clair destiné au client {nom_client}.
 
-    Détails du dossier de dédouanement :
+    Détails de la cotation :
     - Marchandise : {article_nom} (Code SH: {item_info['sh']})
     - Quantité : {quantite} unités
-    - Prix unitaire : {prix_unitaire_xof:,.0f} FCFA ({prix_unitaire_devise} {devise_facture.split()[0]})
-    - Valeur Marchandise Total (FOB) : {fob_xof:,.0f} FCFA
-    - Frais de Transport / Fret : {fret_xof:,.0f} FCFA
-    - Estimation Droits & Taxes Douane (SYDAM World / TEC UEMOA) : {total_douane:,.0f} FCFA
-    - Passage Portuaire, GUCE & Prestations Transit : {total_transit:,.0f} FCFA
-    --------------------------------------------------
-    - MONTANT TOTAL DU DEVIS : {total_facture:,.0f} FCFA
-    - Acompte Reçu : {acompte:,.0f} FCFA
-    - SOLDE RESTANT À RÉGLER : {solde_du:,.0f} FCFA
+    - Prix unitaire : {prix_unitaire_xof:,.0f} FCFA
+    - Total FOB : {fob_xof:,.0f} FCFA
+    - Fret : {fret_xof:,.0f} FCFA
+    - Droits & Taxes Douane (SYDAM World) : {total_douane:,.0f} FCFA
+    - Prestations Transit & Passage Portuaire : {total_transit:,.0f} FCFA
+    - TOTAL GLOBAL : {total_facture:,.0f} FCFA
+    - Acompte reçu : {acompte:,.0f} FCFA
+    - SOLDE RESTANT : {solde_du:,.0f} FCFA
 
-    Instructions :
-    1. Présentez la cotation de manière lisible et structurée avec des puces.
-    2. Demandez au client de valider ce devis pour initier l'enregistrement de la Déclaration Intention d'Importation (DII) sur le GUCE.
-    3. Concluez avec une formule de politesse professionnelle.
+    Invitez le client à valider pour engager la DII sur le GUCE.
     """
 
     if openai_api_key and OpenAI:
@@ -370,44 +374,42 @@ with tab_cotation:
     if not message_genere:
         message_genere = f"""Bonjour {nom_client},
 
-Nous avons finalisé l'étude de cotation douanière et logistique pour votre importation de : {article_nom}.
-
-Voici le récapitulatif détaillé de votre devis :
+Voici la cotation éditée par la société Kelanewin Transit pour votre article : {article_nom}.
 
 • Quantité : {quantite} unités
 • Prix Unitaire : {prix_unitaire_xof:,.0f} FCFA
 • Valeur Marchandise (FOB) : {fob_xof:,.0f} FCFA
-• Frais de Fret International : {fret_xof:,.0f} FCFA
+• Frais de Fret : {fret_xof:,.0f} FCFA
 • Droits & Taxes de Douane (SYDAM World) : {total_douane:,.0f} FCFA
-• Passage Portuaire, GUCE & Prestations Transit : {total_transit:,.0f} FCFA
+• Prestations Transit & Formalités GUCE : {total_transit:,.0f} FCFA
 
 ---------------------------------------------------
-MONTANT TOTAL DE LA PRESTATION : {total_facture:,.0f} FCFA
+MONTANT TOTAL FACTURÉ : {total_facture:,.0f} FCFA
 Acompte reçu : {acompte:,.0f} FCFA
 SOLDE RESTANT À RÉGLER : {solde_du:,.0f} FCFA
 ---------------------------------------------------
 
-Merci de nous donner votre accord pour l'ouverture du dossier sur le GUCE et le dépôt de la déclaration douanière.
+Merci de nous confirmer votre accord pour lancer les démarches de dédouanement.
 
 Cordialement,
-L'Équipe Kouassi Express Transit
+L'Équipe Kelanewin Transit
 Abidjan, Côte d'Ivoire"""
 
-    message_genere = st.text_area("Message rédigé pour le client (Modifiable) :", value=message_genere, height=280)
+    message_genere = st.text_area("Message structuré rédigé pour le client :", value=message_genere, height=280)
 
     # Génération du lien direct Gmail
     gmail_params = urlencode({
         "view": "cm",
         "fs": "1",
         "to": email_client.strip(),
-        "su": f"Cotation Transit & Dédouanement - {article_nom} ({quantite} unités)",
+        "su": f"Cotation Kelanewin Transit - {article_nom} ({quantite} unités)",
         "body": message_genere,
         **({"authuser": sender_email.strip()} if sender_email.strip() else {}),
     })
     gmail_link = f"https://mail.google.com/mail/?{gmail_params}"
 
     st.link_button("📧 Envoyer directement le message par Gmail", gmail_link, use_container_width=True)
-    st.caption("Un clic ouvrira votre messagerie Gmail préremplie avec le destinataire, l'objet et le corps du message.")
+    st.caption("Un clic ouvrira votre messagerie Gmail préremplie.")
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
@@ -415,20 +417,16 @@ Abidjan, Côte d'Ivoire"""
 # =========================================================
 with tab_ai_expert:
     st.markdown('<div class="ai-box-3d">', unsafe_allow_html=True)
-    st.subheader("🤖 Assistant Expert SYDAM World & Réglementation CI")
-    st.write("Posez vos questions sur le classement SH, les exonérations UEMOA, les procédures Webb Fontaine ou la documentation GUCE (FDI, RFC, B/L).")
+    st.subheader("🤖 Assistant Expert Kelanewin Transit (SYDAM World & GUCE)")
+    st.write("Posez vos questions sur le classement SH, les exonérations UEMOA, les procédures Webb Fontaine ou la documentation GUCE.")
 
-    user_query = st.text_area("Exemple : Quel est le tarif de douane pour une station solaire de 100kW ? Faut-il une DII ?")
+    user_query = st.text_area("Exemple : Quel est le tarif de douane pour du matériel de topographie ?")
 
     if st.button("🔍 Interroger l'Expert Douanier IA"):
         if openai_api_key and OpenAI:
             try:
                 client_ai = OpenAI(api_key=openai_api_key)
-                prompt_expert = f"""
-                Vous êtes un expert transitaire senior assermenté auprès de la Douane Ivoirienne et utilisateur expérimenté de SYDAM World.
-                Répondez de façon synthétique et technique à la question suivante :
-                {user_query}
-                """
+                prompt_expert = f"Vous êtes un expert transitaire chez Kelanewin Transit en Côte d'Ivoire. Répondez de manière technique : {user_query}"
                 res_ai = client_ai.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=[{"role": "user", "content": prompt_expert}],
@@ -436,9 +434,9 @@ with tab_ai_expert:
                 st.markdown("### 💡 Analyse & Recommandation Douanière :")
                 st.info(res_ai.choices[0].message.content)
             except Exception as e:
-                st.error(f"Erreur de connexion avec l'IA : {e}")
+                st.error(f"Erreur avec la clé API : {e}")
         else:
-            st.warning("Veuillez renseigner votre clé API OpenAI dans la barre latérale pour activer l'assistant IA.")
+            st.warning("Veuillez saisir une clé API valide dans la barre latérale.")
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
@@ -446,7 +444,7 @@ with tab_ai_expert:
 # =========================================================
 with tab_base_sh:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-    st.subheader("📚 Base de Données Tarifaire des Produits d'Importation Courants")
+    st.subheader("📚 Base de Données Tarifaire Kelanewin Transit")
     
     df_db = pd.DataFrame.from_dict(DATABASE_ARTICLES, orient="index")
     df_db.reset_index(inplace=True)
