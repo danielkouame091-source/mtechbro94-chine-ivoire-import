@@ -3,3 +3,5 @@ streamlit
 pandas
 requests
 groq
+psycopg2-binary
+python-dotenv
