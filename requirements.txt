@@ -1,45 +1,5 @@
-# Kelanewin Transit Pro
-
-Application Streamlit de gestion portuaire, douanière et commerciale pour les dossiers d'import/export.
-
-## Démarrage rapide
-
-```bash
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-## Sécurité
-
-Configuration recommandée via variables d'environnement ou `.streamlit/secrets.toml`.
-
-```bash
-export APP_ADMIN_PASSWORD="admin_password"
-export APP_COMMERCIAL_PASSWORD="commercial_password"
-export APP_COMPTABLE_PASSWORD="comptable_password"
-export GROQ_API_KEY="votre_cle_groq"
-export SMTP_SERVER="smtp.gmail.com"
-export SMTP_PORT="587"
-export SMTP_USERNAME="expediteur@gmail.com"
-export SMTP_PASSWORD="votre_mot_de_passe"
-```
-
-## Fonctionnalités
-
-- Authentification RBAC
-- Cotation pro avec taux de conversion
-- PDF proforma automatiques
-- CRM de suivi de dossiers
-- Export Excel / CSV
-- Assistant IA basé sur Groq
-- Base SH SQLite
-- Audit trail des actions
-
-## Structure
-
-- `app.py` : application principale
-- `schema.sql` : schéma de données
-- `uploads_dossiers/` : documents uploadés
-- `transit_enterprise.db` : base locale SQLite
+streamlit
+pandas
+requests
+reportlab
+groq
