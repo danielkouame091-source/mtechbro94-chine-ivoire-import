@@ -1,5 +1,5 @@
 import os
-from urllib.parse import quote
+from urllib.parse import urlencode
 
 import pandas as pd
 import streamlit as st
@@ -42,12 +42,14 @@ st.sidebar.image(AVATARS[selected_avatar], caption=selected_avatar, use_containe
 st.markdown('<div class="header-banner"><h1>📦 SYDAM PRO : COTATION & AUTOMATISATION CLIENT</h1><p>Calculateur Douanier UEMOA Côte d’Ivoire & Assistant de Réponse</p></div>', unsafe_allow_html=True)
 
 st.subheader("👤 1. Coordonnées du Client & Canal d’Envoi")
-c1, c2, c3 = st.columns(3)
+c1, c2, c3, c4 = st.columns(4)
 with c1:
     nom_client = st.text_input("Nom / Entreprise du Client", value="ETS KOUASSI & FRERES")
 with c2:
-    email_client = st.text_input("Email du Client", value="client@example.com")
+    email_client = st.text_input("Email du destinataire", value="client@example.com")
 with c3:
+    sender_email = st.text_input("Votre email expéditeur", value="")
+with c4:
     tel_client = st.text_input("Téléphone / WhatsApp", value="+2250700000000")
 
 st.subheader("📋 2. Informations Marchandise & Facture")
@@ -127,8 +129,16 @@ Le Département Transit & Dédouanement."""
 
 message_genere = st.text_area("Message à envoyer", value=message_genere, height=220)
 
-# This does not send through Streamlit. It opens the user's configured email app.
-email_link = f"mailto:{quote(email_client.strip())}?subject={quote(f'Votre cotation transit - {article_nom}')}" \
-             f"&body={quote(message_genere)}"
-st.link_button("📧 Ouvrir Gmail / application Email pour envoyer", email_link, use_container_width=True)
-st.caption("Le bouton ouvre l’application email configurée sur votre téléphone ou ordinateur. Vérifiez le destinataire et appuyez ensuite sur Envoyer.")
+# Opens Gmail compose with sender account selected when that account is logged in.
+# The email is sent by Gmail only after the user reviews and taps Send.
+gmail_params = urlencode({
+    "view": "cm",
+    "fs": "1",
+    "to": email_client.strip(),
+    "su": f"Votre cotation transit - {article_nom}",
+    "body": message_genere,
+    **({"authuser": sender_email.strip()} if sender_email.strip() else {}),
+})
+gmail_link = f"https://mail.google.com/mail/?{gmail_params}"
+st.link_button("📧 Ouvrir Gmail pour envoyer", gmail_link, use_container_width=True)
+st.caption("Le destinataire et le message sont préremplis. Si votre email expéditeur est connecté à Gmail, il sera sélectionné. Vérifiez puis appuyez sur Envoyer.")
