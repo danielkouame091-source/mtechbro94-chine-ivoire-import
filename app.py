@@ -10,19 +10,24 @@ except ImportError:
     OpenAI = None
 
 # =========================================================
-# CONFIGURATION ET STYLES CSS ULTRA-PROFESSIONNELS EN 3D
+# CONFIGURATION ET STYLES CSS ULTRA-PROFESSIONNELS (3D & GLASSMORPHISM)
 # =========================================================
-st.set_page_config(page_title="SYDAM Pro Transit CI", page_icon="🇨🇮", layout="wide")
+st.set_page_config(
+    page_title="SYDAM Pro Transit CI - Dashboard Expert",
+    page_icon="🇨🇮",
+    layout="wide",
+)
 
-st.markdown("""
+st.markdown(
+    """
 <style>
 .stApp { 
     background-color: #0B0F19; 
     color: #F8FAFC; 
-    font-family: 'Inter', sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
-/* En-tête avec effet de relief 3D */
+/* En-tête avec effet de relief 3D & Gradient Ivoirien */
 .header-banner { 
     background: linear-gradient(135deg, #047857 0%, #10B981 50%, #0284C7 100%); 
     padding: 30px; 
@@ -30,10 +35,10 @@ st.markdown("""
     color: white; 
     margin-bottom: 25px; 
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
-/* Cartes en relief 3D Glassmorphism */
+/* Cartes Neumorphism & Glassmorphism 3D */
 .custom-card-3d { 
     background: #1E293B; 
     border-radius: 18px; 
@@ -43,19 +48,42 @@ st.markdown("""
     box-shadow: 8px 8px 16px #070a11, -8px -8px 16px #151a27;
 }
 
-/* Boîte de bénéfices en 3D */
+/* Cartes KPI pour métriques clés */
+.kpi-card {
+    background: linear-gradient(145deg, #1e293b, #111827);
+    border-radius: 14px;
+    padding: 18px;
+    border: 1px solid #374151;
+    box-shadow: inset 1px 1px 2px rgba(255,255,255,0.05), 0 10px 15px -3px rgba(0,0,0,0.3);
+    text-align: center;
+}
+.kpi-title {
+    font-size: 0.85rem;
+    color: #9CA3AF;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 5px;
+}
+.kpi-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #38BDF8;
+}
+
+/* Boîte de bénéfices net du transitaire */
 .profit-box-3d { 
-    background: linear-gradient(135deg, #15803D, #166534); 
+    background: linear-gradient(135deg, #15803D 0%, #166534 100%); 
     color: white; 
-    padding: 20px; 
+    padding: 22px; 
     border-radius: 16px; 
     text-align: center; 
     margin-top: 15px; 
-    box-shadow: inset 2px 2px 5px rgba(255,255,255,0.2), 0 10px 15px -3px rgba(21, 128, 61, 0.4);
-    font-size: 1.2rem;
+    box-shadow: inset 2px 2px 5px rgba(255,255,255,0.2), 0 10px 20px rgba(21, 128, 61, 0.4);
+    font-size: 1.25rem;
+    font-weight: 600;
 }
 
-/* Boîte Assistant IA 3D */
+/* Boîte IA Conseils Douaniers */
 .ai-box-3d { 
     background: linear-gradient(135deg, #1E1B4B 0%, #312E81 100%); 
     border: 1px solid #6366F1; 
@@ -64,240 +92,365 @@ st.markdown("""
     margin-top: 15px; 
     box-shadow: 0 10px 20px rgba(99, 102, 241, 0.25);
 }
+
+/* Badges SYDAM */
+.badge-sydam {
+    background-color: #0284C7;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # =========================================================
-# BASE DE DONNÉES ARTICLES (CHINE & INTERNATIONAL)
+# BASE DE DONNÉES TARIF D'USAGE (TEC UEMOA / CI SYDAM WORLD)
 # =========================================================
 DATABASE_ARTICLES = {
-    # --- VÉLOS & TRANSPORT DUOTOUX ---
-    "Vélos & Bicyclettes (Non motorisés)": {"sh": "8712.00.00", "dd": 20.0},
-    "Vélos Électriques & VAE": {"sh": "8711.60.00", "dd": 20.0},
-    "Tricycles / Pousse-pousse / Moto-keke": {"sh": "8711.20.00", "dd": 20.0},
-    "Trottinettes Électriques": {"sh": "8711.60.10", "dd": 20.0},
-    "Pièces détachées de vélos": {"sh": "8714.91.00", "dd": 10.0},
+    # --- VÉLOS, TRICYCLES & MOBILITÉ ---
+    "Vélos & Bicyclettes (Non motorisés)": {"sh": "8712.00.00", "dd": 20.0, "cat": "Véhicules"},
+    "Vélos Électriques & VAE": {"sh": "8711.60.00", "dd": 20.0, "cat": "Véhicules"},
+    "Tricycles / Pousse-pousse / Moto-keke": {"sh": "8711.20.00", "dd": 20.0, "cat": "Véhicules"},
+    "Trottinettes Électriques": {"sh": "8711.60.10", "dd": 20.0, "cat": "Véhicules"},
+    "Pièces détachées de vélos (Pneus, Freins, Chambres)": {"sh": "8714.91.00", "dd": 10.0, "cat": "Pièces"},
 
-    # --- ÉLECTRONIQUE & HIGH-TECH ---
-    "Smartphones, iPhones & Téléphones": {"sh": "8517.13.00", "dd": 20.0},
-    "Ordinateurs Portables, MacBooks & Tablettes": {"sh": "8471.30.00", "dd": 5.0},
-    "Téléviseurs Smart TV & Écrans LED": {"sh": "8528.72.00", "dd": 20.0},
-    "Refrigérateurs & Congélateurs": {"sh": "8418.10.00", "dd": 20.0},
-    "Climatiseurs & Split systems": {"sh": "8415.10.00", "dd": 20.0},
+    # --- ÉLECTRONIQUE, ÉLECTROMÉNAGER & HIGH-TECH ---
+    "Smartphones, iPhones & Téléphones portables": {"sh": "8517.13.00", "dd": 20.0, "cat": "High-Tech"},
+    "Ordinateurs Portables, MacBooks & Tablettes": {"sh": "8471.30.00", "dd": 5.0, "cat": "Informatique"},
+    "Téléviseurs Smart TV & Écrans LED": {"sh": "8528.72.00", "dd": 20.0, "cat": "Électronique"},
+    "Réfrigérateurs & Congélateurs": {"sh": "8418.10.00", "dd": 20.0, "cat": "Électroménager"},
+    "Climatiseurs & Split Systems": {"sh": "8415.10.00", "dd": 20.0, "cat": "Électroménager"},
+    "Machines à laver le linge": {"sh": "8450.11.00", "dd": 20.0, "cat": "Électroménager"},
+    "Écouteurs, Casques & Enceintes Bluetooth": {"sh": "8518.30.00", "dd": 20.0, "cat": "High-Tech"},
+    "Montres Connectées / Smartwatches": {"sh": "8517.62.00", "dd": 20.0, "cat": "High-Tech"},
 
-    # --- ÉNERGIE SOLAIRE ---
-    "Panneaux Photovoltaïques / Solaires": {"sh": "8541.43.00", "dd": 5.0},
-    "Batteries Lithium & GEL": {"sh": "8507.60.00", "dd": 10.0},
-    "Onduleurs & Convertisseurs Solaires": {"sh": "8504.40.00", "dd": 5.0},
+    # --- ÉNERGIE SOLAIRE & ÉLECTRICITÉ ---
+    "Panneaux Photovoltaïques / Solaires": {"sh": "8541.43.00", "dd": 5.0, "cat": "Énergie"},
+    "Onduleurs & Convertisseurs Solaires": {"sh": "8504.40.00", "dd": 5.0, "cat": "Énergie"},
+    "Batteries Lithium & GEL pour Solaire": {"sh": "8507.60.00", "dd": 10.0, "cat": "Énergie"},
+    "Projecteurs & Lampes Solaires LED": {"sh": "9405.42.00", "dd": 20.0, "cat": "Éclairage"},
 
-    # --- MODE & BEAUTÉ ---
-    "Perruques & Mèches en Cheveux Humains": {"sh": "6704.20.00", "dd": 20.0},
-    "Vêtements & Prêt-à-porter": {"sh": "6204.62.00", "dd": 20.0},
-    "Chaussures & Baskets de Sport": {"sh": "6403.99.00", "dd": 20.0},
+    # --- MODE, TEXTILE & BEAUTÉ ---
+    "Perruques & Mèches en Cheveux Humains": {"sh": "6704.20.00", "dd": 20.0, "cat": "Cosmétique"},
+    "Perruques & Mèches Synthétiques": {"sh": "6704.11.00", "dd": 20.0, "cat": "Cosmétique"},
+    "Vêtements & Prêt-à-porter": {"sh": "6204.62.00", "dd": 20.0, "cat": "Textile"},
+    "Chaussures & Baskets de Sport": {"sh": "6403.99.00", "dd": 20.0, "cat": "Chaussures"},
+    "Sacs à main, Sacs à dos & Valises": {"sh": "4202.22.00", "dd": 20.0, "cat": "Maroquinerie"},
+    "Produits Cosmétiques & Soins": {"sh": "3304.99.00", "dd": 20.0, "cat": "Cosmétique"},
+
+    # --- QUINCAILLERIE, MACHINES & MATÉRIAUX ---
+    "Groupes Électrogènes (Générateurs)": {"sh": "8502.11.00", "dd": 5.0, "cat": "Machines"},
+    "Machines Industrielles & Outillage de chantier": {"sh": "8479.89.00", "dd": 5.0, "cat": "Machines"},
+    "Imprimantes & Recharges d'encre": {"sh": "8443.31.00", "dd": 5.0, "cat": "Bureautique"},
+    "Pneus pour Automobiles & Camions": {"sh": "4011.10.00", "dd": 10.0, "cat": "Automobile"},
+    "Meubles & Mobilier de bureau / Maison": {"sh": "9403.60.00", "dd": 20.0, "cat": "Mobilier"},
+    "Ustensiles de Cuisine & Vaisselle Inox/Plastique": {"sh": "7323.93.00", "dd": 20.0, "cat": "Ménager"},
 }
 
 # =========================================================
-# BARRE LATÉRALE - PROFIL EXPERT TRANSIT
+# BARRE LATÉRALE - PROFIL EXPERT & CONFIGURATION DEVISE
 # =========================================================
-st.sidebar.title("🇨🇮 TRANSIT AUTOMATION")
-st.sidebar.markdown("**Expert Transitaire & Conseil Douanier**")
+st.sidebar.title("🇨🇮 KOUASSI EXPRESS TRANSIT")
+st.sidebar.caption("Système Expert SYDAM World & GUCE CI")
 
 st.sidebar.markdown("---")
-openai_api_key = st.sidebar.text_input("Clé API OpenAI (ChatGPT)", type="password")
-taux_cny_xof = st.sidebar.number_input("Taux 1 CNY -> FCFA", value=82.0)
-taux_usd_xof = st.sidebar.number_input("Taux 1 USD -> FCFA", value=610.0)
+
+# Clé API OpenAI
+openai_api_key = st.sidebar.text_input("🔑 Clé API OpenAI (ChatGPT)", type="password")
+
+# Taux de Change
+st.sidebar.subheader("💱 Taux de Change du Jour")
+taux_cny_xof = st.sidebar.number_input("1 CNY -> FCFA", value=82.0, step=0.5)
+taux_usd_xof = st.sidebar.number_input("1 USD -> FCFA", value=610.0, step=1.0)
+
+# Paramètres Portuaires & BTA
+st.sidebar.subheader("⚓ Options Logistiques")
+mode_transport = st.sidebar.selectbox("Mode de Transport", ["Maritime (FCL/LCL)", "Aérien Express"])
+assurance_rate = st.sidebar.number_input("Taux Assurance CAF (%)", value=0.5, step=0.1) / 100
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("💡 **Support Transitaire :**\n*Tel:* +225 07 00 00 00 00\n*Abidjan Port-Bouët / San-Pédro*")
 
 # =========================================================
 # ENTÊTE PRINCIPALE
 # =========================================================
 st.markdown("""
 <div class="header-banner">
-    <h1>📦 SYDAM PRO : COTATION AUTOMATISÉE ET INTELLIGENTE</h1>
-    <p>Cabinet d'Expertise en Transit & Dédouanement UEMOA - Côte d'Ivoire</p>
+    <h1>📦 KOUASSI EXPRESS TRANSIT : COTATION & DÉDOUANEMENT CI</h1>
+    <p>Calculateur Officiel SYDAM World, Tarifs UEMOA (TEC) & Générateur AI de Devis Client</p>
 </div>
 """, unsafe_allow_html=True)
 
 # =========================================================
-# 1. COORDONNÉES DU CLIENT
+# ONGLET PRINCIPAL - NAVIGATION
 # =========================================================
-st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-st.subheader("👤 1. Coordonnées du Client & Canal d’Envoi")
-c1, c2, c3, c4 = st.columns(4)
-with c1:
-    nom_client = st.text_input("Nom / Entreprise du Client", value="ETS KOUASSI & FRERES")
-with c2:
-    email_client = st.text_input("Email du destinataire", value="client@example.com")
-with c3:
-    sender_email = st.text_input("Votre email expéditeur", value="")
-with c4:
-    tel_client = st.text_input("Téléphone / WhatsApp", value="+2250700000000")
-st.markdown('</div>', unsafe_allow_html=True)
+tab_cotation, tab_ai_expert, tab_base_sh = st.tabs([
+    "📊 Cotation & Calcul Douanier", 
+    "🤖 Assistant IA SYDAM & Fret", 
+    "📚 Nomenclature & Codes SH"
+])
 
 # =========================================================
-# 2. DÉTAILS DE LA MARCHANDISE (PRIX UNITAIRE, QUANTITÉ, FOB)
+# TAB 1 : COTATION & CALCUL DOUANIER
 # =========================================================
-st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-st.subheader("📋 2. Informations Marchandise (Prix Unitaire & Quantité)")
-c1, c2 = st.columns([2, 1])
+with tab_cotation:
+    # 1. INFORMATIONS CLIENT
+    st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
+    st.subheader("👤 1. Coordonnées du Client & Canal d’Envoi")
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        nom_client = st.text_input("Nom / Entreprise du Client", value="ETS KOUASSI & FRERES")
+    with c2:
+        email_client = st.text_input("Email du destinataire", value="client@example.com")
+    with c3:
+        sender_email = st.text_input("Votre email expéditeur", value="")
+    with c4:
+        tel_client = st.text_input("Téléphone / WhatsApp", value="+2250700000000")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-with c1:
-    article_nom = st.selectbox("Article à dédouaner (Import Chine & Monde)", list(DATABASE_ARTICLES))
-    item = DATABASE_ARTICLES[article_nom]
-    devise = st.selectbox("Devise Facture", ["CNY (Yuan)", "USD (Dollar)"])
+    # 2. INFORMATIONS MARCHANDISE (QUANTITÉ + PRIX UNITAIRE)
+    st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
+    st.subheader("📋 2. Caractéristiques de la Marchandise & Facture")
+    col_a, col_b = st.columns([2, 1])
+
+    with col_a:
+        article_nom = st.selectbox("Sélectionner l'article à dédouaner", list(DATABASE_ARTICLES.keys()))
+        item_info = DATABASE_ARTICLES[article_nom]
+        devise_facture = st.selectbox("Devise de la Facture Fournisseur", ["CNY (Yuan Chinois)", "USD (Dollar Américain)"])
+        
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            quantite = st.number_input("Quantité d'unités", min_value=1, value=100, step=1)
+        with m2:
+            prix_unitaire_devise = st.number_input(f"Prix Unitaire ({devise_facture.split()[0]})", min_value=0.01, value=150.0, step=5.0)
+        with m3:
+            fret_devise = st.number_input(f"Frais de Fret Total ({devise_facture.split()[0]})", min_value=0.0, value=2000.0, step=50.0)
+
+        # Calcul du Montant Marchandise FOB en Devise
+        fob_devise = quantite * prix_unitaire_devise
+        st.markdown(f"👉 **Montant Total Marchandise (FOB) :** `{fob_devise:,.2f} {devise_facture.split()[0]}`")
+
+    with col_b:
+        st.markdown(f"""
+        <div style="background:#0F172A; padding:18px; border-radius:12px; border:1px solid #334155;">
+            <span class="badge-sydam">RÉGIME SYDAM</span><br/><br/>
+            <b>Code SH :</b> <code>{item_info['sh']}</code><br/>
+            <b>Catégorie :</b> {item_info['cat']}<br/>
+            <b>Droit de Douane (DD) :</b> {item_info['dd']}%<br/>
+            <b>TVA CI :</b> 18.0%<br/>
+            <b>Redevances Complémentaires :</b> RSE (1%), PCS (0.8%), PC (0.5%), PFI (1.0%)
+        </div>
+        """, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # 3. HONORAIRES & CALCUL BÉNÉFICE NET
+    st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
+    st.subheader("💼 3. Prestations de Transit, Acconage & Marge Transitaire")
+    h1, h2, h3 = st.columns(3)
+    with h1:
+        frais_port = st.number_input("Passage Portuaire / Passage Aéroport (FCFA)", value=150000, step=5000)
+        frais_guce = st.number_input("Frais GUCE & Webb Fontaine (FCFA)", value=35000, step=2500)
+    with h2:
+        honoraires = st.number_input("Honoraires Transit Facturés (FCFA)", value=250000, step=10000)
+        charges_ops = st.number_input("Vos Charges Réelles/Débours (FCFA)", value=50000, step=5000)
+    with h3:
+        acompte = st.number_input("Acompte Réceptionné du Client (FCFA)", value=1000000, step=50000)
+
+    benefice_net = honoraires - charges_ops
+    st.markdown(f'<div class="profit-box-3d">💰 BÉNÉFICE NET DU TRANSITAIRE SUR CE DOSSIER : <b>{benefice_net:,.0f} FCFA</b></div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # =========================================================
+    # ALGORITHME DE CALCUL CONFORME SYDAM WORLD & UEMOA
+    # =========================================================
+    taux_conversion = taux_cny_xof if "CNY" in devise_facture else taux_usd_xof
     
-    col_u1, col_u2, col_u3 = st.columns(3)
-    with col_u1:
-        quantite = st.number_input("Quantité d'articles", min_value=1, value=50)
-    with col_u2:
-        prix_unitaire_devise = st.number_input(f"Prix Unitaire ({devise.split()[0]})", min_value=0.0, value=300.0)
-    with col_u3:
-        fret_devise = st.number_input(f"Frais de Fret Total ({devise.split()[0]})", min_value=0.0, value=2500.0)
+    # Conversions FCFA
+    prix_unitaire_xof = prix_unitaire_devise * taux_conversion
+    fob_xof = fob_devise * taux_conversion
+    fret_xof = fret_devise * taux_conversion
+    
+    # Assurance & CAF (Coût, Assurance, Fret)
+    assurance_xof = (fob_xof + fret_xof) * assurance_rate
+    caf_xof = fob_xof + fret_xof + assurance_xof
 
-    fob_devise = quantite * prix_unitaire_devise
-    st.markdown(f"**Montant Total Marchandise (FOB) :** `{fob_devise:,.2f} {devise.split()[0]}`")
+    # Taux de Droits Douaniers : DD + RSE(1%) + PCS(0.8%) + PC(0.5%) + PFI(1.0%)
+    taux_dd = item_info["dd"] / 100.0
+    taux_redevances = 0.010 + 0.008 + 0.005 + 0.010
+    total_taux_droits = taux_dd + taux_redevances
 
-with c2:
-    st.info(f"**Code SH SYDAM :** {item['sh']}\n\n**Droits de Douane (DD) :** {item['dd']}%")
-st.markdown('</div>', unsafe_allow_html=True)
+    total_droits_hors_tva = caf_xof * total_taux_droits
+    base_tva = caf_xof + total_droits_hors_tva
+    tva_xof = base_tva * 0.18
 
-# =========================================================
-# 3. HONORAIRES ET BÉNÉFICES DU TRANSITAIRE
-# =========================================================
-st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-st.subheader("💼 3. Honoraires & Bénéfices du Transitaire")
-h1, h2, h3 = st.columns(3)
-with h1:
-    frais_port = st.number_input("Acconage & Passage Portuaire (FCFA)", value=150000)
-    frais_guce = st.number_input("Frais GUCE & Formalités (FCFA)", value=35000)
-with h2:
-    honoraires = st.number_input("Vos Honoraires Facturés (FCFA)", value=250000)
-    charges_ops = st.number_input("Vos Charges Réelles (FCFA)", value=50000)
-with h3:
-    acompte = st.number_input("Acompte Réceptionné du Client (FCFA)", value=1000000)
+    total_douane = total_droits_hors_tva + tva_xof
+    total_transit = frais_port + frais_guce + honoraires
+    total_facture = fob_xof + fret_xof + total_douane + total_transit
+    solde_du = total_facture - acompte
 
-benefice_net = honoraires - charges_ops
-st.markdown(f'<div class="profit-box-3d">💰 BÉNÉFICE NET DU TRANSITAIRE SUR CE DOSSIER : <b>{benefice_net:,.0f} FCFA</b></div>', unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
+    # 4. RÉSUMÉ FINANCIER STRUCTURÉ
+    st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
+    st.subheader("📊 4. Synthèse Financière du Devis Client")
 
-# =========================================================
-# CALCULS DOUANIERS SYDAM (CÔTE D'IVOIRE / UEMOA)
-# =========================================================
-taux_conv = taux_cny_xof if "CNY" in devise else taux_usd_xof
-prix_unitaire_xof = prix_unitaire_devise * taux_conv
-fob_xof = fob_devise * taux_conv
-fret_xof = fret_devise * taux_conv
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        st.markdown(f"""<div class="kpi-card"><div class="kpi-title">Valeur CAF Douane</div><div class="kpi-value">{caf_xof:,.0f} FCFA</div></div>""", unsafe_allow_html=True)
+    with k2:
+        st.markdown(f"""<div class="kpi-card"><div class="kpi-title">Droits & Taxes Douane</div><div class="kpi-value">{total_douane:,.0f} FCFA</div></div>""", unsafe_allow_html=True)
+    with k3:
+        st.markdown(f"""<div class="kpi-card"><div class="kpi-title">Frais Transit & Port</div><div class="kpi-value">{total_transit:,.0f} FCFA</div></div>""", unsafe_allow_html=True)
+    with k4:
+        st.markdown(f"""<div class="kpi-card"><div class="kpi-title" style="color:#10B981;">Total Général Facturé</div><div class="kpi-value" style="color:#10B981;">{total_facture:,.0f} FCFA</div></div>""", unsafe_allow_html=True)
 
-caf_devise = (fob_devise + fret_devise) * 1.005
-caf_xof = caf_devise * taux_conv
+    st.markdown("<br/>", unsafe_allow_html=True)
 
-# Droits et Taxes Douane CI (DD + RSE + PCS + PC + PFI)
-total_droits = caf_xof * (item["dd"] / 100 + .010 + .008 + .005 + .010)
-tva_xof = (caf_xof + total_droits) * .18
-total_douane = total_droits + tva_xof
+    # Tableau Récapitulatif
+    df_detail = pd.DataFrame([{
+        "Désignation Article": article_nom,
+        "Code SH": item_info["sh"],
+        "Qté": quantite,
+        "P.U. (FCFA)": round(prix_unitaire_xof),
+        "Total FOB (FCFA)": round(fob_xof),
+        "Fret (FCFA)": round(fret_xof),
+        "Droits Douane & TVA (FCFA)": round(total_douane),
+        "Passage Port & Formalités (FCFA)": round(total_transit),
+        "Montant Total (FCFA)": round(total_facture),
+        "Acompte (FCFA)": round(acompte),
+        "Solde Dû (FCFA)": round(solde_du),
+    }])
 
-total_transit = frais_port + frais_guce + honoraires
-total_facture = fob_xof + fret_xof + total_douane + total_transit
-solde_du = total_facture - acompte
+    st.dataframe(df_detail, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# =========================================================
-# RÉSUMÉ FINANCIER STRUCTURÉ POUR LE CLIENT
-# =========================================================
-st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-st.subheader("📑 Résumé Financier Détaillé pour le Client")
+    # 5. GÉNÉRATION DE LA RÉPONSE & EXPÉDITION GMAIL
+    st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
+    st.subheader("🤖 5. Génération Automatique du Devis Client")
 
-df_client = pd.DataFrame([{
-    "Désignation": article_nom,
-    "Code SH": item["sh"],
-    "Quantité": quantite,
-    "Prix Unitaire (FCFA)": round(prix_unitaire_xof),
-    "Montant Marchandise (FCFA)": round(fob_xof),
-    "Frais Fret (FCFA)": round(fret_xof),
-    "Droits & Taxes Douane (FCFA)": round(total_douane),
-    "Total Général Facturé (FCFA)": round(total_facture),
-    "Solde Restant Dû (FCFA)": round(solde_du),
-}])
+    prompt_devis = f"""
+    Vous êtes un expert transitaire agréé en Côte d'Ivoire travaillant pour la société Kouassi Express Transit.
+    Rédigez un message professionnel, clair et courtois destiné au client {nom_client}.
 
-st.dataframe(df_client, use_container_width=True)
-st.markdown('</div>', unsafe_allow_html=True)
+    Détails du dossier de dédouanement :
+    - Marchandise : {article_nom} (Code SH: {item_info['sh']})
+    - Quantité : {quantite} unités
+    - Prix unitaire : {prix_unitaire_xof:,.0f} FCFA ({prix_unitaire_devise} {devise_facture.split()[0]})
+    - Valeur Marchandise Total (FOB) : {fob_xof:,.0f} FCFA
+    - Frais de Transport / Fret : {fret_xof:,.0f} FCFA
+    - Estimation Droits & Taxes Douane (SYDAM World / TEC UEMOA) : {total_douane:,.0f} FCFA
+    - Passage Portuaire, GUCE & Prestations Transit : {total_transit:,.0f} FCFA
+    --------------------------------------------------
+    - MONTANT TOTAL DU DEVIS : {total_facture:,.0f} FCFA
+    - Acompte Reçu : {acompte:,.0f} FCFA
+    - SOLDE RESTANT À RÉGLER : {solde_du:,.0f} FCFA
 
-# =========================================================
-# 4. ASSISTANT IA & GÉNÉRATION AUTOMATIQUE DU MESSAGE CLIENT
-# =========================================================
-st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-st.subheader("🤖 4. Assistant IA & Génération Automatique de la Réponse")
+    Instructions :
+    1. Présentez la cotation de manière lisible et structurée avec des puces.
+    2. Demandez au client de valider ce devis pour initier l'enregistrement de la Déclaration Intention d'Importation (DII) sur le GUCE.
+    3. Concluez avec une formule de politesse professionnelle.
+    """
 
-prompt = f"""
-Vous êtes un expert transitaire senior basé en Côte d'Ivoire.
-Rédigez un message très professionnel et clair pour le client {nom_client}.
-
-Détails de la cotation :
-- Article : {article_nom} (Code SH: {item['sh']})
-- Quantité : {quantite} unités
-- Prix unitaire : {prix_unitaire_xof:,.0f} FCFA
-- Total Marchandise FOB : {fob_xof:,.0f} FCFA
-- Frais de Fret : {fret_xof:,.0f} FCFA
-- Droits & Taxes Douane (SYDAM World) : {total_douane:,.0f} FCFA
-- Prestations Transit & Formalités : {total_transit:,.0f} FCFA
-- Total Global : {total_facture:,.0f} FCFA
-- Acompte Reçu : {acompte:,.0f} FCFA
-- Solde Restant à Régler : {solde_du:,.0f} FCFA
-
-Instructions :
-1. Présentez la cotation de manière détaillée (Prix unitaire, quantité, droits de douane et frais de transit).
-2. Invitez le client à valider l'accord pour le traitement sur le Guichet Unique (GUCE).
-3. Conservez une signature professionnelle et courtoise.
-"""
-
-if openai_api_key and OpenAI:
-    try:
-        response = OpenAI(api_key=openai_api_key).chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-        )
-        message_genere = response.choices[0].message.content
-    except Exception as exc:
-        st.warning(f"Note OpenAI : {exc}")
+    if openai_api_key and OpenAI:
+        try:
+            client_ai = OpenAI(api_key=openai_api_key)
+            response = client_ai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt_devis}],
+            )
+            message_genere = response.choices[0].message.content
+        except Exception as exc:
+            st.warning(f"Note OpenAI : {exc}")
+            message_genere = None
+    else:
         message_genere = None
-else:
-    message_genere = None
 
-if not message_genere:
-    message_genere = f"""Bonjour {nom_client},
+    if not message_genere:
+        message_genere = f"""Bonjour {nom_client},
 
-Voici le détail récapitulatif de votre cotation pour l'importation de votre marchandise :
+Nous avons finalisé l'étude de cotation douanière et logistique pour votre importation de : {article_nom}.
 
-- Article : {article_nom} (Code SH: {item['sh']})
-- Quantité : {quantite} unités
-- Prix Unitaire : {prix_unitaire_xof:,.0f} FCFA
-- Valeur Marchandise (FOB) : {fob_xof:,.0f} FCFA
-- Frais de Fret : {fret_xof:,.0f} FCFA
-- Droits & Taxes Douanières (SYDAM) : {total_douane:,.0f} FCFA
-- Prestations Transit & Passage Portuaire : {total_transit:,.0f} FCFA
+Voici le récapitulatif détaillé de votre devis :
+
+• Quantité : {quantite} unités
+• Prix Unitaire : {prix_unitaire_xof:,.0f} FCFA
+• Valeur Marchandise (FOB) : {fob_xof:,.0f} FCFA
+• Frais de Fret International : {fret_xof:,.0f} FCFA
+• Droits & Taxes de Douane (SYDAM World) : {total_douane:,.0f} FCFA
+• Passage Portuaire, GUCE & Prestations Transit : {total_transit:,.0f} FCFA
 
 ---------------------------------------------------
-MONTANT TOTAL DU DOSSIER : {total_facture:,.0f} FCFA
+MONTANT TOTAL DE LA PRESTATION : {total_facture:,.0f} FCFA
 Acompte reçu : {acompte:,.0f} FCFA
 SOLDE RESTANT À RÉGLER : {solde_du:,.0f} FCFA
 ---------------------------------------------------
 
-Merci de nous donner votre accord afin de lancer les formalités sur le GUCE / Douane.
+Merci de nous donner votre accord pour l'ouverture du dossier sur le GUCE et le dépôt de la déclaration douanière.
 
 Cordialement,
-Le Département Transit & Dédouanement."""
+L'Équipe Kouassi Express Transit
+Abidjan, Côte d'Ivoire"""
 
-message_genere = st.text_area("Message structuré rédigé pour le client :", value=message_genere, height=260)
+    message_genere = st.text_area("Message rédigé pour le client (Modifiable) :", value=message_genere, height=280)
 
-# Lien dynamique vers Gmail
-gmail_params = urlencode({
-    "view": "cm",
-    "fs": "1",
-    "to": email_client.strip(),
-    "su": f"Cotation Transit & Dédouanement - {article_nom} ({quantite} unités)",
-    "body": message_genere,
-    **({"authuser": sender_email.strip()} if sender_email.strip() else {}),
-})
-gmail_link = f"https://mail.google.com/mail/?{gmail_params}"
+    # Génération du lien direct Gmail
+    gmail_params = urlencode({
+        "view": "cm",
+        "fs": "1",
+        "to": email_client.strip(),
+        "su": f"Cotation Transit & Dédouanement - {article_nom} ({quantite} unités)",
+        "body": message_genere,
+        **({"authuser": sender_email.strip()} if sender_email.strip() else {}),
+    })
+    gmail_link = f"https://mail.google.com/mail/?{gmail_params}"
 
-st.link_button("📧 Envoyer directement le message par Gmail", gmail_link, use_container_width=True)
-st.caption("Le message s'ouvrira directement prérempli dans votre interface Gmail. Vous n'aurez plus qu'à cliquer sur Envoyer.")
-st.markdown('</div>', unsafe_allow_html=True)
+    st.link_button("📧 Envoyer directement le message par Gmail", gmail_link, use_container_width=True)
+    st.caption("Un clic ouvrira votre messagerie Gmail préremplie avec le destinataire, l'objet et le corps du message.")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# =========================================================
+# TAB 2 : ASSISTANT IA SYDAM & CONSEIL DOUANIER
+# =========================================================
+with tab_ai_expert:
+    st.markdown('<div class="ai-box-3d">', unsafe_allow_html=True)
+    st.subheader("🤖 Assistant Expert SYDAM World & Réglementation CI")
+    st.write("Posez vos questions sur le classement SH, les exonérations UEMOA, les procédures Webb Fontaine ou la documentation GUCE (FDI, RFC, B/L).")
+
+    user_query = st.text_area("Exemple : Quel est le tarif de douane pour une station solaire de 100kW ? Faut-il une DII ?")
+
+    if st.button("🔍 Interroger l'Expert Douanier IA"):
+        if openai_api_key and OpenAI:
+            try:
+                client_ai = OpenAI(api_key=openai_api_key)
+                prompt_expert = f"""
+                Vous êtes un expert transitaire senior assermenté auprès de la Douane Ivoirienne et utilisateur expérimenté de SYDAM World.
+                Répondez de façon synthétique et technique à la question suivante :
+                {user_query}
+                """
+                res_ai = client_ai.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": prompt_expert}],
+                )
+                st.markdown("### 💡 Analyse & Recommandation Douanière :")
+                st.info(res_ai.choices[0].message.content)
+            except Exception as e:
+                st.error(f"Erreur de connexion avec l'IA : {e}")
+        else:
+            st.warning("Veuillez renseigner votre clé API OpenAI dans la barre latérale pour activer l'assistant IA.")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# =========================================================
+# TAB 3 : BASE NOMENCLATURE & SH
+# =========================================================
+with tab_base_sh:
+    st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
+    st.subheader("📚 Base de Données Tarifaire des Produits d'Importation Courants")
+    
+    df_db = pd.DataFrame.from_dict(DATABASE_ARTICLES, orient="index")
+    df_db.reset_index(inplace=True)
+    df_db.columns = ["Désignation Produit", "Code SH", "Droit Douane (DD %)", "Catégorie"]
+    
+    st.dataframe(df_db, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
