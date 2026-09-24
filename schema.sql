@@ -1,0 +1,13 @@
+CREATE TABLE IF NOT EXISTS tarif_douane_ci (
+    code_sh VARCHAR(10) PRIMARY KEY,
+    designation VARCHAR(255) NOT NULL,
+    categorie VARCHAR(100),
+    droit_douane NUMERIC(5,2) NOT NULL DEFAULT 20.00,
+    tva NUMERIC(5,2) NOT NULL DEFAULT 18.00,
+    rse NUMERIC(5,2) NOT NULL DEFAULT 1.00,
+    pcs NUMERIC(5,2) NOT NULL DEFAULT 0.80,
+    pc NUMERIC(5,2) NOT NULL DEFAULT 0.50,
+    pfi NUMERIC(5,2) NOT NULL DEFAULT 1.00,
+    reference_circulaire VARCHAR(100),
+    date_mise_a_jour TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
