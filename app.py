@@ -64,16 +64,6 @@ st.markdown("""
     margin-top: 15px; 
     box-shadow: 0 10px 20px rgba(99, 102, 241, 0.25);
 }
-
-/* Style de l'expert */
-.expert-profile-card {
-    background: #1E293B;
-    border-radius: 16px;
-    padding: 15px;
-    text-align: center;
-    border: 1px solid #334155;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -107,17 +97,10 @@ DATABASE_ARTICLES = {
 }
 
 # =========================================================
-# BARRE LATÉRALE - INCARNATION PAR L'EXPERT DE LA PHOTO
+# BARRE LATÉRALE - PROFIL EXPERT TRANSIT
 # =========================================================
 st.sidebar.title("🇨🇮 TRANSIT AUTOMATION")
-
-# Affichage direct de votre photo de profil transmise
-EXPERT_PHOTO_PATH = "PHOTO-2026-06-07-20-02-59.jpg"
-
-if os.path.exists(EXPERT_PHOTO_PATH):
-    st.sidebar.image(EXPERT_PHOTO_PATH, caption="Kouassi Kouame Daniel - Expert Transitaire Agréé", use_container_width=True)
-else:
-    st.sidebar.info("📷 Image de l'expert chargée")
+st.sidebar.markdown("**Expert Transitaire & Conseil Douanier**")
 
 st.sidebar.markdown("---")
 openai_api_key = st.sidebar.text_input("Clé API OpenAI (ChatGPT)", type="password")
@@ -244,7 +227,7 @@ st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
 st.subheader("🤖 4. Assistant IA & Génération Automatique de la Réponse")
 
 prompt = f"""
-Vous êtes Kouassi Kouame Daniel, un expert transitaire senior basé en Côte d'Ivoire.
+Vous êtes un expert transitaire senior basé en Côte d'Ivoire.
 Rédigez un message très professionnel et clair pour le client {nom_client}.
 
 Détails de la cotation :
@@ -300,8 +283,7 @@ SOLDE RESTANT À RÉGLER : {solde_du:,.0f} FCFA
 Merci de nous donner votre accord afin de lancer les formalités sur le GUCE / Douane.
 
 Cordialement,
-Kouassi Kouame Daniel
-Département Transit & Dédouanement."""
+Le Département Transit & Dédouanement."""
 
 message_genere = st.text_area("Message structuré rédigé pour le client :", value=message_genere, height=260)
 
