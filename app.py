@@ -63,7 +63,7 @@ st.markdown("""
         margin-top: 15px;
     }
     </style>
-""", unsafe_allow_html=True)
+ """, unsafe_allow_html=True)
 
 # =========================================================
 # 2. IMAGES 3D DES EXPERTS TRANSIT ET BASE DE DONNÉES SH CI
@@ -114,7 +114,7 @@ st.markdown("""
         <h1>📦 SYDAM PRO : COTATION & AUTOMATISATION CLIENT</h1>
         <p>Calculateur Douanier UEMOA Côte d'Ivoire & Assistant de Réponse ChatGPT</p>
     </div>
-""", unsafe_allow_html=True)
+ """, unsafe_allow_html=True)
 
 st.markdown('<div class="custom-card">', unsafe_allow_html=True)
 st.subheader("👤 1. Coordonnées du Client & Canal d'Envoi")
@@ -167,7 +167,7 @@ st.markdown(f"""
     <div class="profit-box">
         💰 BÉNÉFICE NET DU TRANSITAIRE SUR CE DOSSIER : <b>{benefice_net:,.0f} FCFA</b>
     </div>
-""", unsafe_allow_html=True)
+ """, unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
@@ -256,9 +256,9 @@ Instructions :
 """
 
 if openai_api_key:
-    openai.api_key = openai_api_key
     try:
-        response = openai.ChatCompletion.create(
+        client = openai.OpenAI(api_key=openai_api_key)
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "Vous êtes un expert en cotation douanière et transit maritime en Côte d'Ivoire."},
@@ -290,7 +290,7 @@ st.markdown(f"""
         <h4>✨ Message Rédigé par ChatGPT pour le Client :</h4>
         <p style="white-space: pre-line;">{message_genere}</p>
     </div>
-""", unsafe_allow_html=True)
+ """, unsafe_allow_html=True)
 
 # =========================================================
 # 8. ACTION D'ENVOI AUTOMATIQUE
