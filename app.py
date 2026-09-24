@@ -20,12 +20,50 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# =========================================================
+# BASE DE DONNÉES ÉTENDUE : PRODUITS DE CHINE & VÉLOS (UEMOA / CI)
+# =========================================================
 DATABASE_ARTICLES = {
+    # --- VÉLOS & TRANSPORT DUOTOUX ---
+    "Vélos & Bicyclettes (Non motorisés)": {"sh": "8712.00.00", "dd": 20.0},
+    "Vélos Électriques & VAE": {"sh": "8711.60.00", "dd": 20.0},
+    "Tricycles / Pousse-pousse / Moto-keke": {"sh": "8711.20.00", "dd": 20.0},
+    "Trottinettes Électriques": {"sh": "8711.60.10", "dd": 20.0},
+    "Pièces détachées de vélos (Pneus, Chambres, Freins)": {"sh": "8714.91.00", "dd": 10.0},
+
+    # --- ÉLECTRONIQUE, ÉLECTROMÉNAGER & HIGH-TECH ---
+    "Smartphones, iPhones & Téléphones portable": {"sh": "8517.13.00", "dd": 20.0},
+    "Ordinateurs Portables, MacBooks & Tablettes": {"sh": "8471.30.00", "dd": 5.0},
+    "Téléviseurs Smart TV & Écrans LED": {"sh": "8528.72.00", "dd": 20.0},
+    "Refrigérateurs & Congélateurs": {"sh": "8418.10.00", "dd": 20.0},
+    "Climatiseurs & Split systems": {"sh": "8415.10.00", "dd": 20.0},
+    "Machines à laver le linge": {"sh": "8450.11.00", "dd": 20.0},
+    "Écouteurs, Casques & Enceintes Bluetooth": {"sh": "8518.30.00", "dd": 20.0},
+    "Montres Connectées / Smartwatches": {"sh": "8517.62.00", "dd": 20.0},
+
+    # --- ÉNERGIE SOLAIRE & ÉLECTRICITÉ (Produits très importés de Chine) ---
+    "Panneaux Photovoltaïques / Solaires": {"sh": "8541.43.00", "dd": 5.0},
+    "Onduleurs & Convertisseurs Solaires": {"sh": "8504.40.00", "dd": 5.0},
+    "Batteries Lithium & GEL pour Solaire": {"sh": "8507.60.00", "dd": 10.0},
+    "Projecteurs & Lampes Solaires LED": {"sh": "9405.42.00", "dd": 20.0},
+
+    # --- MODE, TEXTILE & BEAUTÉ ---
     "Perruques & Mèches en Cheveux Humains": {"sh": "6704.20.00", "dd": 20.0},
-    "Smartphones, iPhones & Téléphones": {"sh": "8517.13.00", "dd": 20.0},
-    "Ordinateurs Portables & MacBooks": {"sh": "8471.30.00", "dd": 5.0},
-    "Vêtements & Prêt-à-porter": {"sh": "6204.62.00", "dd": 20.0},
+    "Perruques & Mèches Synthétiques": {"sh": "6704.11.00", "dd": 20.0},
+    "Vêtements & Prêt-à-porter (Hommes/Femmes)": {"sh": "6204.62.00", "dd": 20.0},
+    "Chaussures & Baskets de Sport": {"sh": "6403.99.00", "dd": 20.0},
+    "Sacs à main, Sacs à dos & Valises": {"sh": "4202.22.00", "dd": 20.0},
+    "Produits Cosmétiques, Maquillage & Soins": {"sh": "3304.99.00", "dd": 20.0},
+
+    # --- QUINCAILLERIE, MACHINES & MATÉRIAUX ---
+    "Groupes Électrogènes (Générateurs)": {"sh": "8502.11.00", "dd": 5.0},
+    "Machines Industrielles & Outillage de chantier": {"sh": "8479.89.00", "dd": 5.0},
+    "Imprimantes & Recharges d'encre": {"sh": "8443.31.00", "dd": 5.0},
+    "Pneus pour Automobiles & Camions": {"sh": "4011.10.00", "dd": 10.0},
+    "Meubles & Mobilier de bureau / Maison": {"sh": "9403.60.00", "dd": 20.0},
+    "Ustensiles de Cuisine & Vaisselle en Inox/Plastique": {"sh": "7323.93.00", "dd": 20.0},
 }
+
 AVATARS = {
     "Expert Douane & Cotation": "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=800&q=80",
     "Conseiller Logistics & Fret": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=800&q=80",
@@ -55,7 +93,7 @@ with c4:
 st.subheader("📋 2. Informations Marchandise & Facture")
 c1, c2 = st.columns([2, 1])
 with c1:
-    article_nom = st.selectbox("Article à dédouaner", list(DATABASE_ARTICLES))
+    article_nom = st.selectbox("Article à dédouaner (Import Chine & Monde)", list(DATABASE_ARTICLES))
     item = DATABASE_ARTICLES[article_nom]
     devise = st.selectbox("Devise Facture", ["CNY (Yuan)", "USD (Dollar)"])
     v1, v2 = st.columns(2)
@@ -64,7 +102,7 @@ with c1:
     with v2:
         fret_devise = st.number_input("Frais de Fret", min_value=0.0, value=2500.0)
 with c2:
-    st.info(f"Code SH : {item['sh']}\n\nDroits de douane : {item['dd']}%")
+    st.info(f"Code SH : {item['sh']}\n\nDroits de douane (DD) : {item['dd']}%")
 
 st.subheader("💼 3. Honoraires & Bénéfices du Transitaire")
 h1, h2, h3 = st.columns(3)
