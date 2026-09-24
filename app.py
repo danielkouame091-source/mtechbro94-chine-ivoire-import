@@ -214,7 +214,6 @@ if not st.session_state.authenticated:
         password_input = st.text_input("Mot de passe", type="password")
         
         if st.button("Se connecter", use_container_width=True):
-            # Base utilisateurs simulée avec rôles stricts
             utilisateurs = {
                 "admin": {"password": "transit2026", "role": "Administrateur"},
                 "commercial": {"password": "compta2026", "role": "Commercial / Déclarant"},
@@ -382,7 +381,6 @@ with tab_cotation:
     with c3:
         tel_client = st.text_input("Téléphone / WhatsApp", value="+2250700000000")
 
-    # FONCTION 3 : Upload de pièces justificatives (Facture Fournisseur / B/L / Packing List)
     st.markdown("<br/>", unsafe_allow_html=True)
     uploaded_file = st.file_uploader("📎 Joindre les pièces justificatives (Facture Proforma, B/L, Packing List en PDF ou Image)", type=["pdf", "png", "jpg", "jpeg"])
     
@@ -434,7 +432,6 @@ with tab_cotation:
         """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # FONCTION 4 : Post-acheminement & Surestaries
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("🚚 3. Prestations de Transit, Post-Acheminement & Surestaries")
     h1, h2, h3 = st.columns(3)
@@ -454,7 +451,6 @@ with tab_cotation:
     st.markdown(f'<div class="profit-box-3d">💰 BÉNÉFICE NET DU TRANSITAIRE : <b>{benefice_net:,.0f} FCFA</b></div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Calculs douaniers complets
     taux_conversion = taux_cny_xof if "CNY" in devise_facture else taux_usd_xof
     fob_xof = fob_devise * taux_conversion
     fret_xof = fret_devise * taux_conversion
@@ -486,12 +482,10 @@ with tab_cotation:
 
     st.markdown("<br/>", unsafe_allow_html=True)
 
-    # Enregistrement base de données CRM
     if st.button("💾 Enregistrer ce dossier & Pièces dans la Base CRM", use_container_width=True):
         ajouter_dossier_db(nom_client, article_nom, fob_xof, total_facture, solde_du, "En cours", saved_doc_path)
         st.success("Dossier et pièces jointes enregistrés avec succès dans l'ERP CRM !")
 
-    # Génération du PDF professionnel
     pdf_path = generer_pdf_devis_pro(nom_client, article_nom, item_info, quantite, fob_xof, fret_xof, assurance_xof, caf_xof, total_douane, total_transit, post_acheminement_total, total_facture, acompte, solde_du)
     
     with open(pdf_path, "rb") as pdf_file:
@@ -507,7 +501,6 @@ with tab_cotation:
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Envoi par Email SMTP ou WhatsApp
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("📧 Envoi Automatisé au Client")
     
@@ -590,7 +583,7 @@ with tab_crm:
 # =========================================================
 with tab_ai_expert:
     st.markdown('<div class="ai-box-3d">', unsafe_allow_html=True)
-    st.subheader("🤖 Assistant Expert Kelanewin Transit (Groq Llama 3.3)")
+    st.subheader("🤖 Assistant Expert Kelanewin Transit (Groq Llama 3.1)")
     user_query = st.text_area("Posez votre question sur les procédures douanières ivoiriennes (SYDAM, GUCE, régimes suspensifs...)")
 
     if st.button("🔍 Interroger l'Expert"):
@@ -599,7 +592,7 @@ with tab_ai_expert:
                 client_ai = Groq(api_key=groq_api_key)
                 prompt_expert = f"Vous êtes un expert transitaire en Côte d'Ivoire. Répondez précisément : {user_query}"
                 res_ai = client_ai.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
+                    model="llama-3.1-70b-versatile",
                     messages=[{"role": "user", "content": prompt_expert}],
                 )
                 st.info(res_ai.choices[0].message.content)
@@ -616,7 +609,6 @@ with tab_base_sh:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("📚 Gestion des Articles & Codes SH (Base SQLite)")
     
-    # Restrindre l'ajout d'articles aux rôles autorisés (Ex: Admin ou Commercial)
     if st.session_state.user_role in ["Administrateur", "Commercial / Déclarant"]:
         with st.form("form_ajout_article"):
             st.write("Ajouter un nouvel article au Tarif d'Usage UEMOA")
