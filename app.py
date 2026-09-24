@@ -1,9 +1,5 @@
 import os
-import re
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.utils import formataddr
+from urllib.parse import quote
 
 import pandas as pd
 import streamlit as st
@@ -35,75 +31,6 @@ AVATARS = {
     "Conseiller Logistics & Fret": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=800&q=80",
     "Inspecteur SYDAM World": "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=800&q=80",
 }
-
-
-def get_config(name, default=None, aliases=None):
-    aliases = aliases or []
-    keys = [name, *aliases]
-    try:
-        secrets = st.secrets
-        for key in keys:
-            if key in secrets and secrets[key] not in (None, ""):
-                return secrets[key]
-            for secret_key in secrets.keys():
-                if secret_key.lower() == key.lower() and secrets[secret_key] not in (None, ""):
-                    return secrets[secret_key]
-    except Exception:
-        pass
-    for key in keys:
-        val = os.getenv(key)
-        if val not in (None, ""):
-            return val
-        val = os.getenv(key.upper())
-        if val not in (None, ""):
-            return val
-        val = os.getenv(key.lower())
-        if val not in (None, ""):
-            return val
-    return default
-
-
-def valid_email(value):
-    return bool(re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value or ""))
-
-
-def send_email(recipient, subject, body):
-    host = get_config("smtp_host", "smtp.gmail.com", ["EMAIL_HOST", "mail_host"])
-    port = int(get_config("smtp_port", "587", ["EMAIL_PORT"]))
-    username = get_config("smtp_username", None, ["EMAIL_USERNAME", "EMAIL_USER", "smtp_user"])
-    password = get_config("smtp_password", None, ["EMAIL_PASSWORD", "SMTP_PASSWORD", "email_password"])
-    sender = get_config("from_email", username, ["EMAIL_FROM", "FROM_EMAIL"])
-    use_tls = str(get_config("smtp_use_tls", "true", ["EMAIL_USE_TLS"])).lower() not in {"false", "0", "no"}
-
-    missing = [
-        key for key, value in {
-            "smtp_host": host,
-            "smtp_username": username,
-            "smtp_password": password,
-            "from_email": sender,
-        }.items()
-        if not value
-    ]
-    if missing:
-        raise RuntimeError(
-            "Configuration SMTP manquante : " + ", ".join(missing) + ". "
-            "Ajoutez ces valeurs dans Streamlit > Secrets ou dans les variables d'environnement."
-        )
-
-    message = MIMEMultipart("alternative")
-    message["From"] = formataddr(("SYDAM Pro Transit CI", sender))
-    message["To"] = recipient
-    message["Subject"] = subject
-    message.attach(MIMEText(body, "plain", "utf-8"))
-
-    with smtplib.SMTP(host, port, timeout=30) as smtp:
-        smtp.ehlo()
-        if use_tls:
-            smtp.starttls()
-            smtp.ehlo()
-        smtp.login(username, password)
-        smtp.sendmail(sender, [recipient], message.as_string())
-
 
 st.sidebar.title("🇨🇮 TRANSIT AUTOMATION")
 openai_api_key = st.sidebar.text_input("Clé API OpenAI (ChatGPT)", type="password")
@@ -158,16 +85,14 @@ total_douane = total_droits + tva_xof
 total_transit = frais_port + frais_guce + honoraires
 total_facture = (fob_devise * taux_conv) + (fret_devise * taux_conv) + total_douane + total_transit
 solde_du = total_facture - acompte
-df = pd.DataFrame([
-    {
-        "Désignation": article_nom,
-        "Code SH": item["sh"],
-        "Valeur CAF (FCFA)": round(caf_xof),
-        "Droits & Taxes (FCFA)": round(total_douane),
-        "Total Facturé (FCFA)": round(total_facture),
-        "Solde (FCFA)": round(solde_du),
-    }
-])
+df = pd.DataFrame([{
+    "Désignation": article_nom,
+    "Code SH": item["sh"],
+    "Valeur CAF (FCFA)": round(caf_xof),
+    "Droits & Taxes (FCFA)": round(total_douane),
+    "Total Facturé (FCFA)": round(total_facture),
+    "Solde (FCFA)": round(solde_du),
+}])
 st.subheader("📑 Résumé Financier")
 st.dataframe(df, use_container_width=True)
 
@@ -200,30 +125,10 @@ Merci de valider afin de lancer les formalités GUCE / Douane.
 Cordialement,
 Le Département Transit & Dédouanement."""
 
-st.text_area("Message à envoyer", value=message_genere, height=220)
+message_genere = st.text_area("Message à envoyer", value=message_genere, height=220)
 
-smtp_ready = bool(get_config("smtp_username", None, ["EMAIL_USERNAME", "EMAIL_USER", "smtp_user"]) and get_config("smtp_password", None, ["EMAIL_PASSWORD", "SMTP_PASSWORD", "email_password"]))
-
-if st.button("📧 Envoyer par Email au Client", type="primary", use_container_width=True, disabled=not smtp_ready):
-    if not valid_email(email_client):
-        st.error("Veuillez saisir une adresse email valide.")
-    else:
-        try:
-            send_email(email_client, f"Votre cotation transit - {article_nom}", message_genere)
-            st.success(f"Email envoyé avec succès à {email_client}.")
-        except (smtplib.SMTPException, OSError, RuntimeError, ValueError) as exc:
-            st.error(f"L'envoi a échoué : {exc}")
-            st.info("Vérifiez les Secrets Streamlit et le dossier spam du destinataire.")
-
-if not smtp_ready:
-    st.warning("⚠️ Configuration email requise\n\nAjoutez dans Streamlit secrets : smtp_host, smtp_port, smtp_username, smtp_password, from_email")
-
-with st.expander("Configuration email requise"):
-    st.code('''[smtp]
-smtp_host = "smtp.gmail.com"
-smtp_port = 587
-smtp_username = "votre-adresse@gmail.com"
-smtp_password = "mot-de-passe-application"
-from_email = "votre-adresse@gmail.com"
-smtp_use_tls = true''', language="toml")
-    st.caption("Pour Gmail, utilisez un mot de passe d’application (2FA activée), jamais votre mot de passe habituel.")
+# This does not send through Streamlit. It opens the user's configured email app.
+email_link = f"mailto:{quote(email_client.strip())}?subject={quote(f'Votre cotation transit - {article_nom}')}" \
+             f"&body={quote(message_genere)}"
+st.link_button("📧 Ouvrir Gmail / application Email pour envoyer", email_link, use_container_width=True)
+st.caption("Le bouton ouvre l’application email configurée sur votre téléphone ou ordinateur. Vérifiez le destinataire et appuyez ensuite sur Envoyer.")
