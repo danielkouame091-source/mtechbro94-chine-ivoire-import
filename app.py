@@ -5,9 +5,9 @@ import pandas as pd
 import streamlit as st
 
 try:
-    from openai import OpenAI
+    from groq import Groq
 except ImportError:
-    OpenAI = None
+    Groq = None
 
 # =========================================================
 # CONFIGURATION ET STYLES CSS ULTRA-PROFESSIONNELS (3D & GLASSMORPHISM)
@@ -168,8 +168,8 @@ st.sidebar.caption("Système Expert SYDAM World & GUCE CI")
 
 st.sidebar.markdown("---")
 
-# Clé API OpenAI préremplie avec ta clé
-openai_api_key = st.sidebar.text_input("🔑 Clé API OpenAI (ChatGPT)", value="Kelane0777@", type="password")
+# Clé API Groq
+groq_api_key = st.sidebar.text_input("🔑 Clé API Groq", value="Kelane0777@", type="password")
 
 # Taux de Change
 st.sidebar.subheader("💱 Taux de Change du Jour")
@@ -336,7 +336,7 @@ with tab_cotation:
 
     # 5. GÉNÉRATION DE LA RÉPONSE & EXPÉDITION GMAIL
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-    st.subheader("🤖 5. Génération Automatique du Devis Client")
+    st.subheader("🤖 5. Génération Automatique du Devis Client (via Groq)")
 
     prompt_devis = f"""
     Vous êtes un expert transitaire de la société Kelanewin Transit en Côte d'Ivoire.
@@ -357,16 +357,16 @@ with tab_cotation:
     Invitez le client à valider pour engager la DII sur le GUCE.
     """
 
-    if openai_api_key and OpenAI:
+    if groq_api_key and Groq:
         try:
-            client_ai = OpenAI(api_key=openai_api_key)
+            client_ai = Groq(api_key=groq_api_key)
             response = client_ai.chat.completions.create(
-                model="gpt-4o-mini",
+                model="openai/gpt-oss-120b",
                 messages=[{"role": "user", "content": prompt_devis}],
             )
             message_genere = response.choices[0].message.content
         except Exception as exc:
-            st.warning(f"Note OpenAI : {exc}")
+            st.warning(f"Note Groq : {exc}")
             message_genere = None
     else:
         message_genere = None
@@ -417,26 +417,26 @@ Abidjan, Côte d'Ivoire"""
 # =========================================================
 with tab_ai_expert:
     st.markdown('<div class="ai-box-3d">', unsafe_allow_html=True)
-    st.subheader("🤖 Assistant Expert Kelanewin Transit (SYDAM World & GUCE)")
+    st.subheader("🤖 Assistant Expert Kelanewin Transit (SYDAM World & GUCE via Groq)")
     st.write("Posez vos questions sur le classement SH, les exonérations UEMOA, les procédures Webb Fontaine ou la documentation GUCE.")
 
     user_query = st.text_area("Exemple : Quel est le tarif de douane pour du matériel de topographie ?")
 
     if st.button("🔍 Interroger l'Expert Douanier IA"):
-        if openai_api_key and OpenAI:
+        if groq_api_key and Groq:
             try:
-                client_ai = OpenAI(api_key=openai_api_key)
+                client_ai = Groq(api_key=groq_api_key)
                 prompt_expert = f"Vous êtes un expert transitaire chez Kelanewin Transit en Côte d'Ivoire. Répondez de manière technique : {user_query}"
                 res_ai = client_ai.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model="openai/gpt-oss-120b",
                     messages=[{"role": "user", "content": prompt_expert}],
                 )
                 st.markdown("### 💡 Analyse & Recommandation Douanière :")
                 st.info(res_ai.choices[0].message.content)
             except Exception as e:
-                st.error(f"Erreur avec la clé API : {e}")
+                st.error(f"Erreur avec la clé API Groq : {e}")
         else:
-            st.warning("Veuillez saisir une clé API valide dans la barre latérale.")
+            st.warning("Veuillez saisir une clé API Groq valide dans la barre latérale.")
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
