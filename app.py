@@ -116,11 +116,10 @@ DB_NAME = "transit_enterprise.db"
 UPLOAD_DIR = "uploads_dossiers"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-
+    
     # Table articles & SH
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS articles (
@@ -131,7 +130,7 @@ def init_db():
             categorie TEXT
         )
     """)
-
+    
     # Table dossiers CRM enrichie (Workflow & Pièces jointes)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS dossiers (
@@ -147,7 +146,7 @@ def init_db():
         )
     """)
     conn.commit()
-
+    
     # Remplir par défaut si vide
     cursor.execute("SELECT COUNT(*) FROM articles")
     if cursor.fetchone()[0] == 0:
@@ -163,16 +162,13 @@ def init_db():
         conn.commit()
     conn.close()
 
-
 init_db()
-
 
 def get_articles_db():
     conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql_query("SELECT * FROM articles", conn)
     conn.close()
     return df
-
 
 def ajouter_dossier_db(client, article, fob, total, solde, statut="En cours", doc_path=""):
     conn = sqlite3.connect(DB_NAME)
@@ -185,13 +181,11 @@ def ajouter_dossier_db(client, article, fob, total, solde, statut="En cours", do
     conn.commit()
     conn.close()
 
-
 def get_dossiers_db():
     conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql_query("SELECT * FROM dossiers ORDER BY id DESC", conn)
     conn.close()
     return df
-
 
 def mettre_a_jour_statut_db(dossier_id, nouveau_statut):
     conn = sqlite3.connect(DB_NAME)
@@ -199,7 +193,6 @@ def mettre_a_jour_statut_db(dossier_id, nouveau_statut):
     cursor.execute("UPDATE dossiers SET statut = ? WHERE id = ?", (nouveau_statut, dossier_id))
     conn.commit()
     conn.close()
-
 
 # =========================================================
 # AUTHENTIFICATION AVEC CONTRÔLE D'ACCÈS PAR RÔLES (RBAC) (FONCTION 1)
@@ -216,17 +209,17 @@ if not st.session_state.authenticated:
         st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
         st.subheader("🔐 Connexion Entreprise - Kelanewin Transit")
         st.caption("Sécurité multicouche & Contrôle des Rôles (RBAC)")
-
+        
         username_input = st.text_input("Identifiant utilisateur")
         password_input = st.text_input("Mot de passe", type="password")
-
+        
         if st.button("Se connecter", use_container_width=True):
             utilisateurs = {
                 "admin": {"password": "transit2026", "role": "Administrateur"},
                 "commercial": {"password": "compta2026", "role": "Commercial / Déclarant"},
                 "comptable": {"password": "finance2026", "role": "Comptable / Trésorerie"}
             }
-
+            
             if username_input in utilisateurs and utilisateurs[username_input]["password"] == password_input:
                 st.session_state.authenticated = True
                 st.session_state.username = username_input
@@ -236,7 +229,6 @@ if not st.session_state.authenticated:
                 st.error("Identifiants erronés. (Essayez admin / transit2026)")
         st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
-
 
 # =========================================================
 # FONCTION DE GÉNÉRATION DE PDF PROFESSIONNEL (FONCTION 5)
@@ -300,11 +292,10 @@ def generer_pdf_devis_pro(nom_client, article_nom, item_info, quantite, fob_xof,
 
     elements.append(t)
     elements.append(Spacer(1, 20))
-    elements.append(Paragraph("<b>Conditions de règlement :</b> 50% à la commande, solde avant BAE (Bon à Enlever).<br/><i>Arrêtée la présente proforma à la somme de <b>{:,.0f} FCFA</b>. Cachet, signature et validation du client.</i>".format(total_facture), styles['Normal']))
-
+    elements.append(Paragraph("<b>Conditions de règlement :</b> 50% à la commande, solde avant BAE (Bon à Enlever).<br/><i>Arrêtée la présente proforma à la somme de <b>{:,.0f} FCFA</b>. Cachet & Signature autorisés :</i>".format(total_facture), styles['Normal']))
+    
     doc.build(elements)
     return pdf_filename
-
 
 # =========================================================
 # TAUX DE CHANGE AUTOMATIQUE
@@ -326,7 +317,6 @@ def obtenir_taux_change_automatique():
         pass
     return default_cny_xof, default_usd_xof, "⚠️ Mode secours (Hors ligne)"
 
-
 taux_cny_auto, taux_usd_auto, status_api_devises = obtenir_taux_change_automatique()
 
 # =========================================================
@@ -336,43 +326,6 @@ st.sidebar.title("🇨🇮 KELANEWIN TRANSIT")
 st.sidebar.markdown(f"**Utilisateur :** `{st.session_state.username}`")
 st.sidebar.markdown(f"**Rôle :** `{st.session_state.user_role}`")
 st.sidebar.markdown("---")
-
-def interroger_groq_modele(user_query, api_key):
-    if Groq is None:
-        raise RuntimeError("La librairie 'groq' n'est pas installée.")
-
-    client_ai = Groq(api_key=api_key)
-    models = [
-        "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant",
-        "mixtral-8x7b-32768",
-    ]
-    last_error = None
-
-    for model_name in models:
-        try:
-            res_ai = client_ai.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "Tu es un expert transitaire en Côte d'Ivoire. Réponds précisément, professionnellement et de manière concise."
-                    },
-                    {"role": "user", "content": user_query},
-                ],
-                temperature=0.2,
-                max_tokens=500,
-            )
-            return res_ai.choices[0].message.content
-        except Exception as exc:
-            last_error = exc
-            continue
-
-    raise RuntimeError(
-        "Aucun modèle Groq disponible pour ce compte. Le modèle utilisé par votre clé n'est pas accessible. "
-        f"Dernière erreur: {last_error}"
-    )
-
 
 default_key = st.secrets.get("GROQ_API_KEY", "") if hasattr(st, "secrets") else ""
 groq_api_key = st.sidebar.text_input("🔑 Clé API Groq", value=default_key, type="password")
@@ -430,7 +383,7 @@ with tab_cotation:
 
     st.markdown("<br/>", unsafe_allow_html=True)
     uploaded_file = st.file_uploader("📎 Joindre les pièces justificatives (Facture Proforma, B/L, Packing List en PDF ou Image)", type=["pdf", "png", "jpg", "jpeg"])
-
+    
     saved_doc_path = ""
     if uploaded_file is not None:
         saved_doc_path = os.path.join(UPLOAD_DIR, f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{uploaded_file.name}")
@@ -450,7 +403,7 @@ with tab_cotation:
         item_info = {"sh": item_row["sh"], "dd": item_row["dd"], "cat": item_row["categorie"]}
 
         devise_facture = st.selectbox("Devise de la Facture Fournisseur", ["CNY (Yuan Chinois)", "USD (Dollar Américain)"])
-
+        
         m1, m2, m3 = st.columns(3)
         with m1:
             quantite = st.number_input("Quantité d'unités", min_value=1, value=50, step=1)
@@ -465,7 +418,7 @@ with tab_cotation:
     with col_b:
         fob_xof_estim = fob_devise * (taux_cny_xof if "CNY" in devise_facture else taux_usd_xof)
         alerte_fdi = "✅ FDI non requise (< 1M FCFA)" if fob_xof_estim < 1000000 else "⚠️ FDI & RFC Obligatoires (GUCE)"
-
+        
         st.markdown(f"""
         <div style="background:#0F172A; padding:18px; border-radius:12px; border:1px solid #334155;">
             <span class="badge-sydam">RÉGIME SYDAM</span><br/><br/>
@@ -534,7 +487,7 @@ with tab_cotation:
         st.success("Dossier et pièces jointes enregistrés avec succès dans l'ERP CRM !")
 
     pdf_path = generer_pdf_devis_pro(nom_client, article_nom, item_info, quantite, fob_xof, fret_xof, assurance_xof, caf_xof, total_douane, total_transit, post_acheminement_total, total_facture, acompte, solde_du)
-
+    
     with open(pdf_path, "rb") as pdf_file:
         PDFbyte = pdf_file.read()
 
@@ -550,12 +503,12 @@ with tab_cotation:
 
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("📧 Envoi Automatisé au Client")
-
+    
     msg_texte = f"""Bonjour {nom_client},
 Veuillez trouver ci-joint la cotation officielle & proforma de Kelanewin Transit pour votre article {article_nom}.
 Montant Total : {total_facture:,.0f} FCFA. Solde dû : {solde_du:,.0f} FCFA.
 Cordialement, L'équipe Kelanewin Transit."""
-
+    
     col_s1, col_s2 = st.columns(2)
     with col_s1:
         if st.button("🚀 Envoyer l'Email Pro (SMTP)", use_container_width=True):
@@ -568,7 +521,7 @@ Cordialement, L'équipe Kelanewin Transit."""
                     msg['To'] = email_client
                     msg['Subject'] = f"Facture Proforma & Cotation - Kelanewin Transit ({article_nom})"
                     msg.attach(MIMEText(msg_texte, 'plain'))
-
+                    
                     with open(pdf_path, "rb") as f:
                         attach = MIMEApplication(f.read(), Name=pdf_path)
                     attach['Content-Disposition'] = f'attachment; filename="{pdf_path}"'
@@ -596,15 +549,15 @@ with tab_crm:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("📂 Gestion & Suivi du Workflow des Dossiers (CRM)")
     df_dossiers = get_dossiers_db()
-
+    
     if df_dossiers.empty:
         st.info("Aucun dossier enregistré dans l'ERP CRM pour le moment.")
     else:
         st.dataframe(df_dossiers[['id', 'date', 'client', 'article', 'fob_xof', 'total_facture', 'solde_du', 'statut']], use_container_width=True)
-
+        
         st.markdown("---")
         st.subheader("⚙️ Mettre à jour l'avancement d'un dossier (Workflow Opérationnel)")
-
+        
         col_w1, col_w2, col_w3 = st.columns(3)
         with col_w1:
             dossier_id_choisi = st.selectbox("ID du Dossier à modifier", df_dossiers['id'].tolist())
@@ -622,24 +575,51 @@ with tab_crm:
                 mettre_a_jour_statut_db(dossier_id_choisi, nouveau_statut)
                 st.success(f"Statut du dossier #{dossier_id_choisi} mis à jour avec succès : {nouveau_statut}")
                 st.rerun()
-
+                
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 3 : ASSISTANT IA SYDAM
+# TAB 3 : ASSISTANT IA SYDAM (AVEC SÉCURITÉ DE SECOURS / FALLBACK)
 # =========================================================
 with tab_ai_expert:
     st.markdown('<div class="ai-box-3d">', unsafe_allow_html=True)
-    st.subheader("🤖 Assistant Expert Kelanewin Transit (Groq Llama 3.1)")
+    st.subheader("🤖 Assistant Expert Kelanewin Transit (Groq Llama)")
     user_query = st.text_area("Posez votre question sur les procédures douanières ivoiriennes (SYDAM, GUCE, régimes suspensifs...)")
 
     if st.button("🔍 Interroger l'Expert"):
         if groq_api_key and Groq:
             try:
-                reponse = interroger_groq_modele(user_query, groq_api_key)
-                st.info(reponse)
+                client_ai = Groq(api_key=groq_api_key)
+                prompt_expert = f"Vous êtes un expert transitaire en Côte d'Ivoire. Répondez précisément : {user_query}"
+                
+                # Liste des modèles testés par ordre de priorité pour éviter les erreurs de dépréciation
+                modeles_disponibles = [
+                    "llama-3.1-8b-instant",
+                    "llama-3.3-70b-versatile",
+                    "gemma2-9b-it"
+                ]
+                
+                res_ai = None
+                derniere_erreur = None
+                
+                for mod in modeles_disponibles:
+                    try:
+                        res_ai = client_ai.chat.completions.create(
+                            model=mod,
+                            messages=[{"role": "user", "content": prompt_expert}],
+                        )
+                        break # Si ça fonctionne, on sort de la boucle
+                    except Exception as err:
+                        derniere_erreur = err
+                        continue
+                
+                if res_ai:
+                    st.info(res_ai.choices[0].message.content)
+                else:
+                    st.error(f"Erreur IA : Impossible d'utiliser les modèles Groq. Détails : {derniere_erreur}")
+                    
             except Exception as e:
-                st.error(f"Erreur IA : {e}")
+                st.error(f"Erreur d'initialisation Groq : {e}")
         else:
             st.warning("Veuillez renseigner votre clé API Groq dans la barre latérale.")
     st.markdown('</div>', unsafe_allow_html=True)
@@ -650,7 +630,7 @@ with tab_ai_expert:
 with tab_base_sh:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("📚 Gestion des Articles & Codes SH (Base SQLite)")
-
+    
     if st.session_state.user_role in ["Administrateur", "Commercial / Déclarant"]:
         with st.form("form_ajout_article"):
             st.write("Ajouter un nouvel article au Tarif d'Usage UEMOA")
@@ -659,7 +639,7 @@ with tab_base_sh:
             n_dd = st.number_input("Droit de Douane - DD (%)", value=20.0)
             n_cat = st.text_input("Catégorie")
             submit_article = st.form_submit_button("Enregistrer dans la Base")
-
+            
             if submit_article and n_nom and n_sh:
                 try:
                     conn = sqlite3.connect(DB_NAME)
@@ -678,4 +658,3 @@ with tab_base_sh:
     st.markdown("### Liste actuelle enregistrée en base :")
     st.dataframe(get_articles_db(), use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
-
