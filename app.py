@@ -1,5 +1,6 @@
+import base64
 import os
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import pandas as pd
 import requests
@@ -111,11 +112,10 @@ st.markdown(
 # =========================================================
 # FONCTION DE RÉCUPÉRATION AUTOMATIQUE DES TAUX DE CHANGE
 # =========================================================
-@st.cache_data(ttl=3600)  # Mise à jour automatique toutes les heures
+@st.cache_data(ttl=3600)
 def obtenir_taux_change_automatique():
     default_cny_xof = 82.0
     default_usd_xof = 610.0
-    status_msg = "Valeurs par défaut"
     try:
         url = "https://open.er-api.com/v6/latest/USD"
         response = requests.get(url, timeout=5)
@@ -135,74 +135,42 @@ taux_cny_auto, taux_usd_auto, status_api_devises = obtenir_taux_change_automatiq
 # BASE DE DONNÉES TARIF D'USAGE (TEC UEMOA / CI SYDAM WORLD)
 # =========================================================
 DATABASE_ARTICLES = {
-    # --- MATÉRIEL DE TOPOGRAPHIE & MESURE DE PRÉCISION ---
     "Station Totale Topographique & GNSS/GPS": {"sh": "9015.80.00", "dd": 5.0, "cat": "Topographie"},
     "Théodolites, Niveaux Optiques & Laser": {"sh": "9015.10.00", "dd": 5.0, "cat": "Topographie"},
     "Accessoires Topo (Mires, Trépieds, Cannes, Prismes)": {"sh": "9015.90.00", "dd": 5.0, "cat": "Topographie"},
-
-    # --- PELUCHES, JOUETS & ENFANTS ---
     "Peluches & Doudou Rembourrés": {"sh": "9503.00.41", "dd": 20.0, "cat": "Jouets"},
     "Jouets Électroniques & Figurines Plastique": {"sh": "9503.00.70", "dd": 20.0, "cat": "Jouets"},
-
-    # --- VÉLOS, TRICYCLES & MOBILITÉ ---
     "Vélos & Bicyclettes (Non motorisés)": {"sh": "8712.00.00", "dd": 20.0, "cat": "Véhicules"},
     "Vélos Électriques & VAE": {"sh": "8711.60.00", "dd": 20.0, "cat": "Véhicules"},
     "Tricycles / Pousse-pousse / Moto-keke": {"sh": "8711.20.00", "dd": 20.0, "cat": "Véhicules"},
     "Trottinettes Électriques": {"sh": "8711.60.10", "dd": 20.0, "cat": "Véhicules"},
-    "Pièces détachées de vélos (Pneus, Freins, Chambres)": {"sh": "8714.91.00", "dd": 10.0, "cat": "Pièces"},
-
-    # --- ÉLECTRONIQUE, ÉLECTROMÉNAGER & HIGH-TECH ---
     "Smartphones, iPhones & Téléphones portables": {"sh": "8517.13.00", "dd": 20.0, "cat": "High-Tech"},
     "Ordinateurs Portables, MacBooks & Tablettes": {"sh": "8471.30.00", "dd": 5.0, "cat": "Informatique"},
     "Téléviseurs Smart TV & Écrans LED": {"sh": "8528.72.00", "dd": 20.0, "cat": "Électronique"},
-    "Réfrigérateurs & Congélateurs": {"sh": "8418.10.00", "dd": 20.0, "cat": "Électroménager"},
-    "Climatiseurs & Split Systems": {"sh": "8415.10.00", "dd": 20.0, "cat": "Électroménager"},
-    "Machines à laver le linge": {"sh": "8450.11.00", "dd": 20.0, "cat": "Électroménager"},
-    "Écouteurs, Casques & Enceintes Bluetooth": {"sh": "8518.30.00", "dd": 20.0, "cat": "High-Tech"},
-    "Montres Connectées / Smartwatches": {"sh": "8517.62.00", "dd": 20.0, "cat": "High-Tech"},
-
-    # --- ÉNERGIE SOLAIRE & ÉLECTRICITÉ ---
     "Panneaux Photovoltaïques / Solaires": {"sh": "8541.43.00", "dd": 5.0, "cat": "Énergie"},
     "Onduleurs & Convertisseurs Solaires": {"sh": "8504.40.00", "dd": 5.0, "cat": "Énergie"},
     "Batteries Lithium & GEL pour Solaire": {"sh": "8507.60.00", "dd": 10.0, "cat": "Énergie"},
-    "Projecteurs & Lampes Solaires LED": {"sh": "9405.42.00", "dd": 20.0, "cat": "Éclairage"},
-
-    # --- MODE, TEXTILE & BEAUTÉ ---
     "Perruques & Mèches en Cheveux Humains": {"sh": "6704.20.00", "dd": 20.0, "cat": "Cosmétique"},
-    "Perruques & Mèches Synthétiques": {"sh": "6704.11.00", "dd": 20.0, "cat": "Cosmétique"},
     "Vêtements & Prêt-à-porter": {"sh": "6204.62.00", "dd": 20.0, "cat": "Textile"},
     "Chaussures & Baskets de Sport": {"sh": "6403.99.00", "dd": 20.0, "cat": "Chaussures"},
-    "Sacs à main, Sacs à dos & Valises": {"sh": "4202.22.00", "dd": 20.0, "cat": "Maroquinerie"},
-    "Produits Cosmétiques & Soins": {"sh": "3304.99.00", "dd": 20.0, "cat": "Cosmétique"},
-
-    # --- QUINCAILLERIE, MACHINES & MATÉRIAUX ---
     "Groupes Électrogènes (Générateurs)": {"sh": "8502.11.00", "dd": 5.0, "cat": "Machines"},
-    "Machines Industrielles & Outillage de chantier": {"sh": "8479.89.00", "dd": 5.0, "cat": "Machines"},
-    "Imprimantes & Recharges d'encre": {"sh": "8443.31.00", "dd": 5.0, "cat": "Bureautique"},
-    "Pneus pour Automobiles & Camions": {"sh": "4011.10.00", "dd": 10.0, "cat": "Automobile"},
-    "Meubles & Mobilier de bureau / Maison": {"sh": "9403.60.00", "dd": 20.0, "cat": "Mobilier"},
-    "Ustensiles de Cuisine & Vaisselle Inox/Plastique": {"sh": "7323.93.00", "dd": 20.0, "cat": "Ménager"},
 }
 
 # =========================================================
-# BARRE LATÉRALE - PROFIL EXPERT & CONFIGURATION DEVISE
+# BARRE LATÉRALE - CONFIGURATION
 # =========================================================
 st.sidebar.title("🇨🇮 KELANEWIN TRANSIT")
 st.sidebar.caption("Système Expert SYDAM World & GUCE CI")
-
 st.sidebar.markdown("---")
 
-# Clé API Groq
-groq_api_key = st.sidebar.text_input("🔑 Clé API Groq", value="Kelane0777@", type="password")
+default_key = st.secrets.get("GROQ_API_KEY", "") if hasattr(st, "secrets") else ""
+groq_api_key = st.sidebar.text_input("🔑 Clé API Groq", value=default_key, type="password")
 
-# Taux de Change Automatisés
 st.sidebar.subheader("💱 Taux de Change Automatiques")
 st.sidebar.caption(status_api_devises)
-
 taux_cny_xof = st.sidebar.number_input("1 CNY -> FCFA", value=taux_cny_auto, step=0.1)
 taux_usd_xof = st.sidebar.number_input("1 USD -> FCFA", value=taux_usd_auto, step=1.0)
 
-# Paramètres Portuaires
 st.sidebar.subheader("⚓ Options Logistiques")
 mode_transport = st.sidebar.selectbox("Mode de Transport", ["Maritime (FCL/LCL)", "Aérien Express"])
 assurance_rate = st.sidebar.number_input("Taux Assurance CAF (%)", value=0.5, step=0.1) / 100
@@ -220,9 +188,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# =========================================================
-# NAVIGATION PAR ONGLETS
-# =========================================================
 tab_cotation, tab_ai_expert, tab_base_sh = st.tabs([
     "📊 Cotation & Calcul Douanier", 
     "🤖 Assistant IA SYDAM & Fret", 
@@ -233,7 +198,6 @@ tab_cotation, tab_ai_expert, tab_base_sh = st.tabs([
 # TAB 1 : COTATION & CALCUL DOUANIER
 # =========================================================
 with tab_cotation:
-    # 1. INFORMATIONS CLIENT
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("👤 1. Coordonnées du Client & Canal d’Envoi")
     c1, c2, c3, c4 = st.columns(4)
@@ -247,7 +211,6 @@ with tab_cotation:
         tel_client = st.text_input("Téléphone / WhatsApp", value="+2250700000000")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # 2. INFORMATIONS MARCHANDISE (QUANTITÉ + PRIX UNITAIRE)
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("📋 2. Caractéristiques de la Marchandise & Facture")
     col_a, col_b = st.columns([2, 1])
@@ -265,11 +228,14 @@ with tab_cotation:
         with m3:
             fret_devise = st.number_input(f"Frais de Fret Total ({devise_facture.split()[0]})", min_value=0.0, value=1500.0, step=50.0)
 
-        # Calcul du Montant Marchandise FOB
         fob_devise = quantite * prix_unitaire_devise
         st.markdown(f"👉 **Montant Total Marchandise (FOB) :** `{fob_devise:,.2f} {devise_facture.split()[0]}`")
 
     with col_b:
+        # Contrôle des exigences GUCE
+        fob_xof_estim = fob_devise * (taux_cny_xof if "CNY" in devise_facture else taux_usd_xof)
+        alerte_fdi = "✅ FDI non requise (< 1M FCFA)" if fob_xof_estim < 1000000 else "⚠️ FDI & RFC Obligatoires (GUCE)"
+        
         st.markdown(f"""
         <div style="background:#0F172A; padding:18px; border-radius:12px; border:1px solid #334155;">
             <span class="badge-sydam">RÉGIME SYDAM</span><br/><br/>
@@ -277,12 +243,12 @@ with tab_cotation:
             <b>Catégorie :</b> {item_info['cat']}<br/>
             <b>Droit de Douane (DD) :</b> {item_info['dd']}%<br/>
             <b>TVA CI :</b> 18.0%<br/>
-            <b>Redevances Complémentaires :</b> RSE (1%), PCS (0.8%), PC (0.5%), PFI (1.0%)
+            <hr style="border-color:#334155">
+            <small style="color:#38BDF8;">{alerte_fdi}</small>
         </div>
         """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # 3. HONORAIRES & CALCUL BÉNÉFICE NET
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("💼 3. Prestations de Transit, Acconage & Marge Transitaire")
     h1, h2, h3 = st.columns(3)
@@ -299,21 +265,15 @@ with tab_cotation:
     st.markdown(f'<div class="profit-box-3d">💰 BÉNÉFICE NET DU TRANSITAIRE SUR CE DOSSIER : <b>{benefice_net:,.0f} FCFA</b></div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # =========================================================
-    # ALGORITHME DE CALCUL SYDAM WORLD & UEMOA
-    # =========================================================
+    # Calculs douaniers
     taux_conversion = taux_cny_xof if "CNY" in devise_facture else taux_usd_xof
-    
-    # Conversions FCFA
     prix_unitaire_xof = prix_unitaire_devise * taux_conversion
     fob_xof = fob_devise * taux_conversion
     fret_xof = fret_devise * taux_conversion
     
-    # Assurance & CAF
-    assurance_xof = (fob_xof + fret_xof) * assurance_rate
+    assurance_xof = max((fob_xof + fret_xof) * assurance_rate, 5000.0) # Plancher minimum d'assurance
     caf_xof = fob_xof + fret_xof + assurance_xof
 
-    # Droits & Redevances (DD + RSE + PCS + PC + PFI)
     taux_dd = item_info["dd"] / 100.0
     taux_redevances = 0.010 + 0.008 + 0.005 + 0.010
     total_taux_droits = taux_dd + taux_redevances
@@ -327,7 +287,6 @@ with tab_cotation:
     total_facture = fob_xof + fret_xof + total_douane + total_transit
     solde_du = total_facture - acompte
 
-    # 4. RÉSUMÉ FINANCIER STRUCTURÉ
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("📊 4. Synthèse Financière du Devis Client")
 
@@ -360,9 +319,8 @@ with tab_cotation:
     st.dataframe(df_detail, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # 5. GÉNÉRATION DE LA RÉPONSE & EXPÉDITION GMAIL
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-    st.subheader("🤖 5. Génération Automatique du Devis Client (via Groq)")
+    st.subheader("🤖 5. Génération Automatique du Devis & Options d'Envoi")
 
     prompt_devis = f"""
     Vous êtes un expert transitaire de la société Kelanewin Transit en Côte d'Ivoire.
@@ -371,7 +329,6 @@ with tab_cotation:
     Détails de la cotation :
     - Marchandise : {article_nom} (Code SH: {item_info['sh']})
     - Quantité : {quantite} unités
-    - Prix unitaire : {prix_unitaire_xof:,.0f} FCFA
     - Total FOB : {fob_xof:,.0f} FCFA
     - Fret : {fret_xof:,.0f} FCFA
     - Droits & Taxes Douane (SYDAM World) : {total_douane:,.0f} FCFA
@@ -380,22 +337,20 @@ with tab_cotation:
     - Acompte reçu : {acompte:,.0f} FCFA
     - SOLDE RESTANT : {solde_du:,.0f} FCFA
 
-    Invitez le client à valider pour engager la DII sur le GUCE.
+    Invitez le client à valider pour engager la procédure sur le GUCE.
     """
 
+    message_genere = None
     if groq_api_key and Groq:
         try:
             client_ai = Groq(api_key=groq_api_key)
             response = client_ai.chat.completions.create(
-                model="openai/gpt-oss-120b",
+                model="llama-3.3-70b-versatile",
                 messages=[{"role": "user", "content": prompt_devis}],
             )
             message_genere = response.choices[0].message.content
         except Exception as exc:
             st.warning(f"Note Groq : {exc}")
-            message_genere = None
-    else:
-        message_genere = None
 
     if not message_genere:
         message_genere = f"""Bonjour {nom_client},
@@ -403,7 +358,6 @@ with tab_cotation:
 Voici la cotation éditée par la société Kelanewin Transit pour votre article : {article_nom}.
 
 • Quantité : {quantite} unités
-• Prix Unitaire : {prix_unitaire_xof:,.0f} FCFA
 • Valeur Marchandise (FOB) : {fob_xof:,.0f} FCFA
 • Frais de Fret : {fret_xof:,.0f} FCFA
 • Droits & Taxes de Douane (SYDAM World) : {total_douane:,.0f} FCFA
@@ -423,19 +377,23 @@ Abidjan, Côte d'Ivoire"""
 
     message_genere = st.text_area("Message structuré rédigé pour le client :", value=message_genere, height=280)
 
-    # Génération du lien direct Gmail
-    gmail_params = urlencode({
-        "view": "cm",
-        "fs": "1",
-        "to": email_client.strip(),
-        "su": f"Cotation Kelanewin Transit - {article_nom} ({quantite} unités)",
-        "body": message_genere,
-        **({"authuser": sender_email.strip()} if sender_email.strip() else {}),
-    })
-    gmail_link = f"https://mail.google.com/mail/?{gmail_params}"
+    # Boutons d'envoi et téléchargement
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        gmail_params = urlencode({
+            "view": "cm",
+            "fs": "1",
+            "to": email_client.strip(),
+            "su": f"Cotation Kelanewin Transit - {article_nom} ({quantite} unités)",
+            "body": message_genere,
+            **({"authuser": sender_email.strip()} if sender_email.strip() else {}),
+        })
+        st.link_button("📧 Envoyer par Gmail", f"https://mail.google.com/mail/?{gmail_params}", use_container_width=True)
 
-    st.link_button("📧 Envoyer directement le message par Gmail", gmail_link, use_container_width=True)
-    st.caption("Un clic ouvrira votre messagerie Gmail préremplie.")
+    with col_btn2:
+        whatsapp_url = f"https://wa.me/{tel_client.strip().replace('+', '')}?text={quote(message_genere)}"
+        st.link_button("💬 Envoyer par WhatsApp", whatsapp_url, use_container_width=True)
+
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
@@ -446,7 +404,7 @@ with tab_ai_expert:
     st.subheader("🤖 Assistant Expert Kelanewin Transit (SYDAM World & GUCE via Groq)")
     st.write("Posez vos questions sur le classement SH, les exonérations UEMOA, les procédures Webb Fontaine ou la documentation GUCE.")
 
-    user_query = st.text_area("Exemple : Quel est le tarif de douane pour du matériel de topographie ?")
+    user_query = st.text_area("Exemple : Quel est le tarif de douane pour du matériel de topographie ? Faut-il une FDI ?")
 
     if st.button("🔍 Interroger l'Expert Douanier IA"):
         if groq_api_key and Groq:
@@ -454,7 +412,7 @@ with tab_ai_expert:
                 client_ai = Groq(api_key=groq_api_key)
                 prompt_expert = f"Vous êtes un expert transitaire chez Kelanewin Transit en Côte d'Ivoire. Répondez de manière technique : {user_query}"
                 res_ai = client_ai.chat.completions.create(
-                    model="openai/gpt-oss-120b",
+                    model="llama-3.3-70b-versatile",
                     messages=[{"role": "user", "content": prompt_expert}],
                 )
                 st.markdown("### 💡 Analyse & Recommandation Douanière :")
@@ -462,7 +420,7 @@ with tab_ai_expert:
             except Exception as e:
                 st.error(f"Erreur avec la clé API Groq : {e}")
         else:
-            st.warning("Veuillez saisir une clé API Groq valide dans la barre latérale.")
+            st.warning("Veuillez saisir une clé API Groq valide dans la barre latérale ou via les secrets.")
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
