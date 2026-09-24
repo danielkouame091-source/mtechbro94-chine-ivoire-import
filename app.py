@@ -592,32 +592,34 @@ with tab_ai_expert:
                 client_ai = Groq(api_key=groq_api_key)
                 prompt_expert = f"Vous êtes un expert transitaire en Côte d'Ivoire. Répondez précisément : {user_query}"
                 
-                # Liste des modèles testés par ordre de priorité pour éviter les erreurs de dépréciation
+                # Modèles Groq actuellement supportés
                 modeles_disponibles = [
                     "llama-3.1-8b-instant",
                     "llama-3.3-70b-versatile",
-                    "gemma2-9b-it"
                 ]
                 
                 res_ai = None
-                derniere_erreur = None
+                erreurs = []
                 
                 for mod in modeles_disponibles:
                     try:
                         res_ai = client_ai.chat.completions.create(
                             model=mod,
                             messages=[{"role": "user", "content": prompt_expert}],
+                            temperature=0.2,
+                            max_tokens=1024,
                         )
-                        break # Si ça fonctionne, on sort de la boucle
+                        break
                     except Exception as err:
-                        derniere_erreur = err
+                        erreurs.append(f"{mod}: {err}")
                         continue
                 
                 if res_ai:
                     st.info(res_ai.choices[0].message.content)
                 else:
-                    st.error(f"Erreur IA : Impossible d'utiliser les modèles Groq. Détails : {derniere_erreur}")
-                    
+                    st.error("Erreur IA : Impossible d'utiliser les modèles Groq. Détails :")
+                    with st.expander("Voir les détails techniques"):
+                        st.code("\n".join(erreurs) if erreurs else "Aucune erreur détaillée disponible.")
             except Exception as e:
                 st.error(f"Erreur d'initialisation Groq : {e}")
         else:
