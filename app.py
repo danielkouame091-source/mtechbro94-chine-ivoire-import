@@ -344,12 +344,12 @@ with tab_cotation:
         try:
             client_ai = Groq(api_key=groq_api_key)
             response = client_ai.chat.completions.create(
-                model="llama-3.3-70b-versatile",  # Modèle officiel actif et stable sur Groq
+                model="openai/gpt-oss-20b",  # Modèle universel compatible Groq
                 messages=[{"role": "user", "content": prompt_devis}],
             )
             message_genere = response.choices[0].message.content
-        except Exception as exc:
-            pass  # Bascule propre sur le message par défaut si l'API échoue
+        except Exception:
+            pass  # En cas d'erreur de modèle, utilisation automatique du texte de secours
 
     if not message_genere:
         message_genere = f"""Bonjour {nom_client},
@@ -410,13 +410,13 @@ with tab_ai_expert:
                 client_ai = Groq(api_key=groq_api_key)
                 prompt_expert = f"Vous êtes un expert transitaire chez Kelanewin Transit en Côte d'Ivoire. Répondez de manière technique : {user_query}"
                 res_ai = client_ai.chat.completions.create(
-                    model="llama-3.3-70b-versatile",  # Modèle officiel actif et stable sur Groq
+                    model="openai/gpt-oss-20b",  # Modèle universel compatible Groq
                     messages=[{"role": "user", "content": prompt_expert}],
                 )
                 st.markdown("### 💡 Analyse & Recommandation Douanière :")
                 st.info(res_ai.choices[0].message.content)
             except Exception as e:
-                st.error(f"Erreur d'accès à l'API Groq : {e}")
+                st.error(f"L'assistant IA est temporairement indisponible (Vérifiez la clé ou le modèle) : {e}")
         else:
             st.warning("Veuillez saisir une clé API Groq valide dans la barre latérale ou via les secrets.")
     st.markdown('</div>', unsafe_allow_html=True)
