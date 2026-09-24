@@ -1,13 +1,9 @@
 import os
 from urllib.parse import urlencode
+
 import pandas as pd
 import requests
 import streamlit as st
-
-# =========================================================
-# CONFIGURATION DE LA CLÉ API GROQ DANS LE CODE
-# =========================================================
-GROQ_API_KEY = "votre_cle_api_groq_ici"  # 👈 Remplacez par votre véritable clé API Groq (ex: "gsk_...")
 
 try:
     from groq import Groq
@@ -15,7 +11,7 @@ except ImportError:
     Groq = None
 
 # =========================================================
-# CONFIGURATION ET STYLES CSS
+# CONFIGURATION ET STYLES CSS ULTRA-PROFESSIONNELS (3D & GLASSMORPHISM)
 # =========================================================
 st.set_page_config(
     page_title="Kelanewin Transit - SYDAM Pro CI",
@@ -26,44 +22,100 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-.stApp { background-color: #0B0F19; color: #F8FAFC; font-family: 'Inter', system-ui, sans-serif; }
+.stApp { 
+    background-color: #0B0F19; 
+    color: #F8FAFC; 
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* En-tête avec effet de relief 3D & Gradient Ivoirien */
 .header-banner { 
     background: linear-gradient(135deg, #047857 0%, #10B981 50%, #0284C7 100%); 
-    padding: 30px; border-radius: 20px; color: white; margin-bottom: 25px; 
-    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 30px; 
+    border-radius: 20px; 
+    color: white; 
+    margin-bottom: 25px; 
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.15);
 }
+
+/* Cartes Neumorphism & Glassmorphism 3D */
 .custom-card-3d { 
-    background: #1E293B; border-radius: 18px; padding: 25px; 
-    border: 1px solid #334155; margin-bottom: 25px; box-shadow: 8px 8px 16px #070a11, -8px -8px 16px #151a27;
+    background: #1E293B; 
+    border-radius: 18px; 
+    padding: 25px; 
+    border: 1px solid #334155; 
+    margin-bottom: 25px; 
+    box-shadow: 8px 8px 16px #070a11, -8px -8px 16px #151a27;
 }
+
+/* Cartes KPI pour métriques clés */
 .kpi-card {
-    background: linear-gradient(145deg, #1e293b, #111827); border-radius: 14px; 
-    padding: 18px; border: 1px solid #374151; text-align: center;
+    background: linear-gradient(145deg, #1e293b, #111827);
+    border-radius: 14px;
+    padding: 18px;
+    border: 1px solid #374151;
+    box-shadow: inset 1px 1px 2px rgba(255,255,255,0.05), 0 10px 15px -3px rgba(0,0,0,0.3);
+    text-align: center;
 }
-.kpi-title { font-size: 0.85rem; color: #9CA3AF; text-transform: uppercase; margin-bottom: 5px; }
-.kpi-value { font-size: 1.4rem; font-weight: 700; color: #38BDF8; }
+.kpi-title {
+    font-size: 0.85rem;
+    color: #9CA3AF;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 5px;
+}
+.kpi-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #38BDF8;
+}
+
+/* Boîte de bénéfices net du transitaire */
 .profit-box-3d { 
-    background: linear-gradient(135deg, #15803D 0%, #166534 100%); color: white; 
-    padding: 22px; border-radius: 16px; text-align: center; margin-top: 15px; 
-    font-size: 1.25rem; font-weight: 600;
+    background: linear-gradient(135deg, #15803D 0%, #166534 100%); 
+    color: white; 
+    padding: 22px; 
+    border-radius: 16px; 
+    text-align: center; 
+    margin-top: 15px; 
+    box-shadow: inset 2px 2px 5px rgba(255,255,255,0.2), 0 10px 20px rgba(21, 128, 61, 0.4);
+    font-size: 1.25rem;
+    font-weight: 600;
 }
+
+/* Boîte IA Conseils Douaniers */
 .ai-box-3d { 
     background: linear-gradient(135deg, #1E1B4B 0%, #312E81 100%); 
-    border: 1px solid #6366F1; padding: 22px; border-radius: 16px; margin-top: 15px; 
+    border: 1px solid #6366F1; 
+    padding: 22px; 
+    border-radius: 16px; 
+    margin-top: 15px; 
+    box-shadow: 0 10px 20px rgba(99, 102, 241, 0.25);
 }
-.badge-sydam { background-color: #0284C7; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; }
+
+/* Badges SYDAM */
+.badge-sydam {
+    background-color: #0284C7;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
 </style>
 """,
     unsafe_allow_html=True,
 )
 
 # =========================================================
-# OBTENTION DES TAUX DE CHANGE AUTOMATIQUE
+# FONCTION DE RÉCUPÉRATION AUTOMATIQUE DES TAUX DE CHANGE
 # =========================================================
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600)  # Mise à jour automatique toutes les heures
 def obtenir_taux_change_automatique():
     default_cny_xof = 82.0
     default_usd_xof = 610.0
+    status_msg = "Valeurs par défaut"
     try:
         url = "https://open.er-api.com/v6/latest/USD"
         response = requests.get(url, timeout=5)
@@ -80,39 +132,77 @@ def obtenir_taux_change_automatique():
 taux_cny_auto, taux_usd_auto, status_api_devises = obtenir_taux_change_automatique()
 
 # =========================================================
-# BASE DE DONNÉES TARIFAIRE (TEC UEMOA)
+# BASE DE DONNÉES TARIF D'USAGE (TEC UEMOA / CI SYDAM WORLD)
 # =========================================================
 DATABASE_ARTICLES = {
+    # --- MATÉRIEL DE TOPOGRAPHIE & MESURE DE PRÉCISION ---
     "Station Totale Topographique & GNSS/GPS": {"sh": "9015.80.00", "dd": 5.0, "cat": "Topographie"},
     "Théodolites, Niveaux Optiques & Laser": {"sh": "9015.10.00", "dd": 5.0, "cat": "Topographie"},
     "Accessoires Topo (Mires, Trépieds, Cannes, Prismes)": {"sh": "9015.90.00", "dd": 5.0, "cat": "Topographie"},
+
+    # --- PELUCHES, JOUETS & ENFANTS ---
     "Peluches & Doudou Rembourrés": {"sh": "9503.00.41", "dd": 20.0, "cat": "Jouets"},
     "Jouets Électroniques & Figurines Plastique": {"sh": "9503.00.70", "dd": 20.0, "cat": "Jouets"},
+
+    # --- VÉLOS, TRICYCLES & MOBILITÉ ---
     "Vélos & Bicyclettes (Non motorisés)": {"sh": "8712.00.00", "dd": 20.0, "cat": "Véhicules"},
+    "Vélos Électriques & VAE": {"sh": "8711.60.00", "dd": 20.0, "cat": "Véhicules"},
+    "Tricycles / Pousse-pousse / Moto-keke": {"sh": "8711.20.00", "dd": 20.0, "cat": "Véhicules"},
+    "Trottinettes Électriques": {"sh": "8711.60.10", "dd": 20.0, "cat": "Véhicules"},
+    "Pièces détachées de vélos (Pneus, Freins, Chambres)": {"sh": "8714.91.00", "dd": 10.0, "cat": "Pièces"},
+
+    # --- ÉLECTRONIQUE, ÉLECTROMÉNAGER & HIGH-TECH ---
     "Smartphones, iPhones & Téléphones portables": {"sh": "8517.13.00", "dd": 20.0, "cat": "High-Tech"},
     "Ordinateurs Portables, MacBooks & Tablettes": {"sh": "8471.30.00", "dd": 5.0, "cat": "Informatique"},
+    "Téléviseurs Smart TV & Écrans LED": {"sh": "8528.72.00", "dd": 20.0, "cat": "Électronique"},
+    "Réfrigérateurs & Congélateurs": {"sh": "8418.10.00", "dd": 20.0, "cat": "Électroménager"},
+    "Climatiseurs & Split Systems": {"sh": "8415.10.00", "dd": 20.0, "cat": "Électroménager"},
+    "Machines à laver le linge": {"sh": "8450.11.00", "dd": 20.0, "cat": "Électroménager"},
+    "Écouteurs, Casques & Enceintes Bluetooth": {"sh": "8518.30.00", "dd": 20.0, "cat": "High-Tech"},
+    "Montres Connectées / Smartwatches": {"sh": "8517.62.00", "dd": 20.0, "cat": "High-Tech"},
+
+    # --- ÉNERGIE SOLAIRE & ÉLECTRICITÉ ---
     "Panneaux Photovoltaïques / Solaires": {"sh": "8541.43.00", "dd": 5.0, "cat": "Énergie"},
+    "Onduleurs & Convertisseurs Solaires": {"sh": "8504.40.00", "dd": 5.0, "cat": "Énergie"},
+    "Batteries Lithium & GEL pour Solaire": {"sh": "8507.60.00", "dd": 10.0, "cat": "Énergie"},
+    "Projecteurs & Lampes Solaires LED": {"sh": "9405.42.00", "dd": 20.0, "cat": "Éclairage"},
+
+    # --- MODE, TEXTILE & BEAUTÉ ---
+    "Perruques & Mèches en Cheveux Humains": {"sh": "6704.20.00", "dd": 20.0, "cat": "Cosmétique"},
+    "Perruques & Mèches Synthétiques": {"sh": "6704.11.00", "dd": 20.0, "cat": "Cosmétique"},
+    "Vêtements & Prêt-à-porter": {"sh": "6204.62.00", "dd": 20.0, "cat": "Textile"},
+    "Chaussures & Baskets de Sport": {"sh": "6403.99.00", "dd": 20.0, "cat": "Chaussures"},
+    "Sacs à main, Sacs à dos & Valises": {"sh": "4202.22.00", "dd": 20.0, "cat": "Maroquinerie"},
+    "Produits Cosmétiques & Soins": {"sh": "3304.99.00", "dd": 20.0, "cat": "Cosmétique"},
+
+    # --- QUINCAILLERIE, MACHINES & MATÉRIAUX ---
+    "Groupes Électrogènes (Générateurs)": {"sh": "8502.11.00", "dd": 5.0, "cat": "Machines"},
+    "Machines Industrielles & Outillage de chantier": {"sh": "8479.89.00", "dd": 5.0, "cat": "Machines"},
+    "Imprimantes & Recharges d'encre": {"sh": "8443.31.00", "dd": 5.0, "cat": "Bureautique"},
+    "Pneus pour Automobiles & Camions": {"sh": "4011.10.00", "dd": 10.0, "cat": "Automobile"},
+    "Meubles & Mobilier de bureau / Maison": {"sh": "9403.60.00", "dd": 20.0, "cat": "Mobilier"},
+    "Ustensiles de Cuisine & Vaisselle Inox/Plastique": {"sh": "7323.93.00", "dd": 20.0, "cat": "Ménager"},
 }
 
 # =========================================================
-# BARRE LATÉRALE
+# BARRE LATÉRALE - PROFIL EXPERT & CONFIGURATION DEVISE
 # =========================================================
 st.sidebar.title("🇨🇮 KELANEWIN TRANSIT")
 st.sidebar.caption("Système Expert SYDAM World & GUCE CI")
+
 st.sidebar.markdown("---")
 
-# Affichage du statut de la clé API
-if GROQ_API_KEY and GROQ_API_KEY != "votre_cle_api_groq_ici":
-    st.sidebar.success("🔑 Clé API Groq configurée")
-else:
-    st.sidebar.warning("⚠️ Définissez votre clé API Groq dans le code")
+# Clé API Groq
+groq_api_key = st.sidebar.text_input("🔑 Clé API Groq", value="Kelane0777@", type="password")
 
+# Taux de Change Automatisés
 st.sidebar.subheader("💱 Taux de Change Automatiques")
 st.sidebar.caption(status_api_devises)
 
 taux_cny_xof = st.sidebar.number_input("1 CNY -> FCFA", value=taux_cny_auto, step=0.1)
 taux_usd_xof = st.sidebar.number_input("1 USD -> FCFA", value=taux_usd_auto, step=1.0)
 
+# Paramètres Portuaires
 st.sidebar.subheader("⚓ Options Logistiques")
 mode_transport = st.sidebar.selectbox("Mode de Transport", ["Maritime (FCL/LCL)", "Aérien Express"])
 assurance_rate = st.sidebar.number_input("Taux Assurance CAF (%)", value=0.5, step=0.1) / 100
@@ -121,7 +211,7 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("💡 **Support Kelanewin Transit :**\n*Tel:* +225 07 00 00 00 00\n*Abidjan / San-Pédro*")
 
 # =========================================================
-# EN-TÊTE
+# ENTÊTE PRINCIPALE
 # =========================================================
 st.markdown("""
 <div class="header-banner">
@@ -130,6 +220,9 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# =========================================================
+# NAVIGATION PAR ONGLETS
+# =========================================================
 tab_cotation, tab_ai_expert, tab_base_sh = st.tabs([
     "📊 Cotation & Calcul Douanier", 
     "🤖 Assistant IA SYDAM & Fret", 
@@ -137,9 +230,10 @@ tab_cotation, tab_ai_expert, tab_base_sh = st.tabs([
 ])
 
 # =========================================================
-# TAB 1 : COTATION
+# TAB 1 : COTATION & CALCUL DOUANIER
 # =========================================================
 with tab_cotation:
+    # 1. INFORMATIONS CLIENT
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("👤 1. Coordonnées du Client & Canal d’Envoi")
     c1, c2, c3, c4 = st.columns(4)
@@ -153,6 +247,7 @@ with tab_cotation:
         tel_client = st.text_input("Téléphone / WhatsApp", value="+2250700000000")
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # 2. INFORMATIONS MARCHANDISE (QUANTITÉ + PRIX UNITAIRE)
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("📋 2. Caractéristiques de la Marchandise & Facture")
     col_a, col_b = st.columns([2, 1])
@@ -170,6 +265,7 @@ with tab_cotation:
         with m3:
             fret_devise = st.number_input(f"Frais de Fret Total ({devise_facture.split()[0]})", min_value=0.0, value=1500.0, step=50.0)
 
+        # Calcul du Montant Marchandise FOB
         fob_devise = quantite * prix_unitaire_devise
         st.markdown(f"👉 **Montant Total Marchandise (FOB) :** `{fob_devise:,.2f} {devise_facture.split()[0]}`")
 
@@ -186,6 +282,7 @@ with tab_cotation:
         """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # 3. HONORAIRES & CALCUL BÉNÉFICE NET
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("💼 3. Prestations de Transit, Acconage & Marge Transitaire")
     h1, h2, h3 = st.columns(3)
@@ -202,15 +299,21 @@ with tab_cotation:
     st.markdown(f'<div class="profit-box-3d">💰 BÉNÉFICE NET DU TRANSITAIRE SUR CE DOSSIER : <b>{benefice_net:,.0f} FCFA</b></div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Calculs SYDAM World
+    # =========================================================
+    # ALGORITHME DE CALCUL SYDAM WORLD & UEMOA
+    # =========================================================
     taux_conversion = taux_cny_xof if "CNY" in devise_facture else taux_usd_xof
+    
+    # Conversions FCFA
     prix_unitaire_xof = prix_unitaire_devise * taux_conversion
     fob_xof = fob_devise * taux_conversion
     fret_xof = fret_devise * taux_conversion
     
+    # Assurance & CAF
     assurance_xof = (fob_xof + fret_xof) * assurance_rate
     caf_xof = fob_xof + fret_xof + assurance_xof
 
+    # Droits & Redevances (DD + RSE + PCS + PC + PFI)
     taux_dd = item_info["dd"] / 100.0
     taux_redevances = 0.010 + 0.008 + 0.005 + 0.010
     total_taux_droits = taux_dd + taux_redevances
@@ -224,6 +327,7 @@ with tab_cotation:
     total_facture = fob_xof + fret_xof + total_douane + total_transit
     solde_du = total_facture - acompte
 
+    # 4. RÉSUMÉ FINANCIER STRUCTURÉ
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("📊 4. Synthèse Financière du Devis Client")
 
@@ -256,6 +360,7 @@ with tab_cotation:
     st.dataframe(df_detail, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # 5. GÉNÉRATION DE LA RÉPONSE & EXPÉDITION GMAIL
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("🤖 5. Génération Automatique du Devis Client (via Groq)")
 
@@ -278,17 +383,19 @@ with tab_cotation:
     Invitez le client à valider pour engager la DII sur le GUCE.
     """
 
-    message_genere = None
-    if GROQ_API_KEY and GROQ_API_KEY != "votre_cle_api_groq_ici" and Groq:
+    if groq_api_key and Groq:
         try:
-            client_ai = Groq(api_key=GROQ_API_KEY)
+            client_ai = Groq(api_key=groq_api_key)
             response = client_ai.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="openai/gpt-oss-120b",
                 messages=[{"role": "user", "content": prompt_devis}],
             )
             message_genere = response.choices[0].message.content
         except Exception as exc:
             st.warning(f"Note Groq : {exc}")
+            message_genere = None
+    else:
+        message_genere = None
 
     if not message_genere:
         message_genere = f"""Bonjour {nom_client},
@@ -316,6 +423,7 @@ Abidjan, Côte d'Ivoire"""
 
     message_genere = st.text_area("Message structuré rédigé pour le client :", value=message_genere, height=280)
 
+    # Génération du lien direct Gmail
     gmail_params = urlencode({
         "view": "cm",
         "fs": "1",
@@ -327,25 +435,26 @@ Abidjan, Côte d'Ivoire"""
     gmail_link = f"https://mail.google.com/mail/?{gmail_params}"
 
     st.link_button("📧 Envoyer directement le message par Gmail", gmail_link, use_container_width=True)
+    st.caption("Un clic ouvrira votre messagerie Gmail préremplie.")
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 2 : ASSISTANT IA
+# TAB 2 : ASSISTANT IA SYDAM & CONSEIL DOUANIER
 # =========================================================
 with tab_ai_expert:
     st.markdown('<div class="ai-box-3d">', unsafe_allow_html=True)
-    st.subheader("🤖 Assistant Expert Kelanewin Transit (SYDAM World & GUCE)")
+    st.subheader("🤖 Assistant Expert Kelanewin Transit (SYDAM World & GUCE via Groq)")
     st.write("Posez vos questions sur le classement SH, les exonérations UEMOA, les procédures Webb Fontaine ou la documentation GUCE.")
 
     user_query = st.text_area("Exemple : Quel est le tarif de douane pour du matériel de topographie ?")
 
     if st.button("🔍 Interroger l'Expert Douanier IA"):
-        if GROQ_API_KEY and GROQ_API_KEY != "votre_cle_api_groq_ici" and Groq:
+        if groq_api_key and Groq:
             try:
-                client_ai = Groq(api_key=GROQ_API_KEY)
+                client_ai = Groq(api_key=groq_api_key)
                 prompt_expert = f"Vous êtes un expert transitaire chez Kelanewin Transit en Côte d'Ivoire. Répondez de manière technique : {user_query}"
                 res_ai = client_ai.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
+                    model="openai/gpt-oss-120b",
                     messages=[{"role": "user", "content": prompt_expert}],
                 )
                 st.markdown("### 💡 Analyse & Recommandation Douanière :")
@@ -353,11 +462,11 @@ with tab_ai_expert:
             except Exception as e:
                 st.error(f"Erreur avec la clé API Groq : {e}")
         else:
-            st.warning("Veuillez renseigner votre clé API Groq à la ligne 12 du code.")
+            st.warning("Veuillez saisir une clé API Groq valide dans la barre latérale.")
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 3 : BASE DE DONNÉES SH
+# TAB 3 : BASE NOMENCLATURE & SH
 # =========================================================
 with tab_base_sh:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
