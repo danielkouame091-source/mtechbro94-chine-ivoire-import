@@ -232,7 +232,6 @@ with tab_cotation:
         st.markdown(f"👉 **Montant Total Marchandise (FOB) :** `{fob_devise:,.2f} {devise_facture.split()[0]}`")
 
     with col_b:
-        # Contrôle des exigences GUCE
         fob_xof_estim = fob_devise * (taux_cny_xof if "CNY" in devise_facture else taux_usd_xof)
         alerte_fdi = "✅ FDI non requise (< 1M FCFA)" if fob_xof_estim < 1000000 else "⚠️ FDI & RFC Obligatoires (GUCE)"
         
@@ -271,7 +270,7 @@ with tab_cotation:
     fob_xof = fob_devise * taux_conversion
     fret_xof = fret_devise * taux_conversion
     
-    assurance_xof = max((fob_xof + fret_xof) * assurance_rate, 5000.0) # Plancher minimum d'assurance
+    assurance_xof = max((fob_xof + fret_xof) * assurance_rate, 5000.0)
     caf_xof = fob_xof + fret_xof + assurance_xof
 
     taux_dd = item_info["dd"] / 100.0
@@ -345,7 +344,7 @@ with tab_cotation:
         try:
             client_ai = Groq(api_key=groq_api_key)
             response = client_ai.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="llama3-70b-8192",  # Modèle corrigé et actif
                 messages=[{"role": "user", "content": prompt_devis}],
             )
             message_genere = response.choices[0].message.content
@@ -377,7 +376,6 @@ Abidjan, Côte d'Ivoire"""
 
     message_genere = st.text_area("Message structuré rédigé pour le client :", value=message_genere, height=280)
 
-    # Boutons d'envoi et téléchargement
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
         gmail_params = urlencode({
@@ -412,7 +410,7 @@ with tab_ai_expert:
                 client_ai = Groq(api_key=groq_api_key)
                 prompt_expert = f"Vous êtes un expert transitaire chez Kelanewin Transit en Côte d'Ivoire. Répondez de manière technique : {user_query}"
                 res_ai = client_ai.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
+                    model="llama3-70b-8192",  # Modèle corrigé et actif
                     messages=[{"role": "user", "content": prompt_expert}],
                 )
                 st.markdown("### 💡 Analyse & Recommandation Douanière :")
