@@ -68,6 +68,20 @@ def init_db():
     cursor.execute("""CREATE TABLE IF NOT EXISTS fret_lines (id INTEGER PRIMARY KEY AUTOINCREMENT, num_manifeste TEXT, bl_number TEXT UNIQUE, consignee TEXT, poids_brut REAL, nb_colis INTEGER, statut_apurement TEXT DEFAULT 'Non apuré')""")
     cursor.execute("""CREATE TABLE IF NOT EXISTS articles (id INTEGER PRIMARY KEY AUTOINCREMENT, nom TEXT UNIQUE, sh TEXT, dd REAL, categorie TEXT)""")
     cursor.execute("""CREATE TABLE IF NOT EXISTS dossiers (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, client TEXT, article TEXT, regime TEXT, fob_xof REAL, total_facture REAL, solde_du REAL, statut TEXT, bl_number TEXT, container_number TEXT, date_arrivee TEXT, score_risque REAL, canal_selectivite TEXT, motifs_risque TEXT, quittance_num TEXT, document_path TEXT, honoraires REAL DEFAULT 150000, frais_port REAL DEFAULT 85000, frais_transport REAL DEFAULT 120000, surestaries_xof REAL DEFAULT 0, statut_livraison TEXT DEFAULT 'Sous douane')""")
+    
+    # Table des écritures comptables (Style Sage / SYSCOHADA)
+    cursor.execute("""CREATE TABLE IF NOT EXISTS compta_ecritures (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT,
+        journal TEXT,
+        compte_debit TEXT,
+        libelle_debit TEXT,
+        compte_credit TEXT,
+        libelle_credit TEXT,
+        montant REAL,
+        piece_ref TEXT
+    )""")
+
     existing_cols = [col[1] for col in cursor.execute("PRAGMA table_info(dossiers)").fetchall()]
     for col_name, col_type in [("honoraires", "REAL DEFAULT 150000"), ("frais_port", "REAL DEFAULT 85000"), ("frais_transport", "REAL DEFAULT 120000"), ("surestaries_xof", "REAL DEFAULT 0"), ("statut_livraison", "TEXT DEFAULT 'Sous douane'")]:
         if col_name not in existing_cols:
@@ -189,7 +203,7 @@ st.sidebar.subheader("💱 Taux de Change Officiels"); st.sidebar.caption(status
 taux_cny_xof = st.sidebar.number_input("1 CNY (Chine)", value=taux_devises_dict["CNY"], step=0.1); taux_usd_xof = st.sidebar.number_input("1 USD (Dollar)", value=taux_devises_dict["USD"], step=1.0); taux_eur_xof = st.sidebar.number_input("1 EUR (Euro)", value=taux_devises_dict["EUR"], step=0.1)
 st.sidebar.markdown("---")
 
-# --- WIDGET FLOTTANT POUR L'ASSISTANT IA DANS LA SIDEBAR ---
+# WIDGET FLOTTANT POUR L'ASSISTANT IA DANS LA SIDEBAR
 with st.sidebar:
     st.subheader("🤖 Assistant IA Douanier Flottant")
     with st.popover("💬 Ouvrir le Chatbot IA", use_container_width=True):
@@ -219,11 +233,24 @@ with st.sidebar:
 st.sidebar.markdown("---")
 if st.sidebar.button("🚪 Déconnexion", use_container_width=True): st.session_state.authenticated = False; st.rerun()
 
-st.markdown("""<div class="header-banner"><h1>🏛️ CÔTE D'IVOIRE : SYSTÈME DÉDOUANEMENT & TRANSIT ERP (v5.0)</h1><p>Module Intégré : Cargo, Sélectivité Douanière, Facturation Client, Surestaries, EDI, Innovations Inde/Chine & IA</p></div>""", unsafe_allow_html=True)
+st.markdown("""<div class="header-banner"><h1>🏛️ CÔTE D'IVOIRE : SYSTÈME DÉDOUANEMENT & TRANSIT ERP (v5.0)</h1><p>Module Intégré : Cargo, Sélectivité Douanière, Facturation Client, Surestaries, EDI, Innovations & Comptabilité Sage/SYSCOHADA</p></div>""", unsafe_allow_html=True)
 
-# L'onglet IA a été retiré de la liste principale et transformé en widget flottant ci-dessus
-tabs_list = ["📈 Dashboard & Marges", "🚢 1. Manifeste & Fret", "📋 2. Déclaration en Détail (SAD)", "💼 3. Transit ERP & Facturation", "💳 4. Caisse & BAE", "🔄 5. Passerelle EDI", "📄 6. IDP OCR Cross-Check", "🌐 7. Innovations Inde & Chine", "📖 8. Code des Douanes", "🔐 Admin & Audit Logs"]
-tabs = st.tabs(tabs_list); tab_dash, tab_manifeste, tab_sad, tab_transit_erp, tab_caisse, tab_edi, tab_ocr, tab_innov, tab_code, tab_admin = tabs
+# Ajout du module de comptabilité dans les onglets principaux
+tabs_list = [
+    "📈 Dashboard & Marges", 
+    "🚢 1. Manifeste & Fret", 
+    "📋 2. Déclaration en Détail (SAD)", 
+    "💼 3. Transit ERP & Facturation", 
+    "💳 4. Caisse & BAE", 
+    "📊 5. Comptabilité & SYSCOHADA", 
+    "🔄 6. Passerelle EDI", 
+    "📄 7. IDP OCR Cross-Check", 
+    "🌐 8. Innovations", 
+    "📖 9. Code des Douanes", 
+    "🔐 Admin & Audit"
+]
+tabs = st.tabs(tabs_list)
+tab_dash, tab_manifeste, tab_sad, tab_transit_erp, tab_caisse, tab_compta, tab_edi, tab_ocr, tab_innov, tab_code, tab_admin = tabs
 
 with tab_dash:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True); st.subheader("📈 Performance Globale : Douanes & Agence de Transit")
@@ -304,22 +331,107 @@ with tab_caisse:
     if df_dossiers_all.empty: st.info("Aucune déclaration enregistrée.")
     else:
         st.dataframe(df_dossiers_all[['id','date','client','article','canal_selectivite','total_facture','solde_du','statut']],use_container_width=True); st.markdown("---"); st.subheader("⚙️ Encaisser la Liquidation & Délivrer le BAE"); col_pay1,col_pay2=st.columns(2)
-        with col_pay1: sel_dossier_id=st.selectbox("Sélectionner l'ID du Dossier à Encaisser",df_dossiers_all['id'].tolist()); row_pay=df_dossiers_all[df_dossiers_all['id']==sel_dossier_id].iloc[0]; st.write(f"**Client :** {row_pay['client']} | **Montant à Régler :** `{row_pay['solde_du']:,.0f} FCFA`")
+        with col_pay1: sel_dossier_id=st.selectbox("Sélectionner l'ID du Dossier à Encaisser",df_dossiers_all['id'].tolist(), key="caisse_sel_id"); row_pay=df_dossiers_all[df_dossiers_all['id']==sel_dossier_id].iloc[0]; st.write(f"**Client :** {row_pay['client']} | **Montant à Régler :** `{row_pay['solde_du']:,.0f} FCFA`")
         with col_pay2:
             moyen_paiement=st.selectbox("Mode de Règlement",["TrésorPay / RTGS Banque Centrale","Chèque Certifié Trésor Public","Virement SWIFT","Mobile Money"])
             if st.button("💳 Valider le Paiement & Émettre le BAE",use_container_width=True):
-                quittance=f"QUIT-2026-{sel_dossier_id:05d}"; conn=sqlite3.connect(DB_NAME); conn.execute("UPDATE dossiers SET solde_du=0, statut='Liquidé & Payé (BAE Émis)', quittance_num=? WHERE id=?",(quittance,sel_dossier_id)); conn.commit(); conn.close(); log_action(st.session_state.username,"Paiement Caisse",f"Quittance {quittance} générée pour dossier #{sel_dossier_id}"); pdf_bae=generer_bae_pdf(sel_dossier_id,row_pay['client'],row_pay['article'],row_pay['bl_number'],row_pay['container_number'],quittance,row_pay['total_facture']); st.success(f"Paiement enregistré ! Quittance N° **{quittance}** émise."); st.download_button("📥 Télécharger le Bon à Enlever (BAE) Sécurisé (PDF)",data=open(pdf_bae,"rb").read(),file_name=pdf_bae,mime="application/pdf",use_container_width=True)
+                quittance=f"QUIT-2026-{sel_dossier_id:05d}"
+                conn=sqlite3.connect(DB_NAME)
+                conn.execute("UPDATE dossiers SET solde_du=0, statut='Liquidé & Payé (BAE Émis)', quittance_num=? WHERE id=?",(quittance,sel_dossier_id))
+                
+                # Écriture automatique dans la comptabilité (Style Sage / SYSCOHADA)
+                # Débit 521 (Banque/Caisse) par Crédit 411 (Client)
+                date_j = datetime.now().strftime("%Y-%m-%d")
+                montant_regle = row_pay['solde_du']
+                conn.execute("""
+                    INSERT INTO compta_ecritures (date, journal, compte_debit, libelle_debit, compte_credit, libelle_credit, montant, piece_ref)
+                    VALUES (?, 'CAI', '521000', 'Banque / Caisse Recettes', '411000', ?, ?, ?)
+                """, (date_j, f"Client {row_pay['client']}", montant_regle, quittance))
+                
+                conn.commit()
+                conn.close()
+                
+                log_action(st.session_state.username,"Paiement Caisse",f"Quittance {quittance} générée pour dossier #{sel_dossier_id}")
+                pdf_bae=generer_bae_pdf(sel_dossier_id,row_pay['client'],row_pay['article'],row_pay['bl_number'],row_pay['container_number'],quittance,row_pay['total_facture'])
+                st.success(f"Paiement enregistré et comptabilisé automatiquement ! Quittance N° **{quittance}** émise.")
+                st.download_button("📥 Télécharger le Bon à Enlever (BAE) Sécurisé (PDF)",data=open(pdf_bae,"rb").read(),file_name=pdf_bae,mime="application/pdf",use_container_width=True)
     st.markdown('</div>',unsafe_allow_html=True)
+
+# --- NOUVEAU MODULE DE COMPTABILITÉ TYPE SAGE / SYSCOHADA ---
+with tab_compta:
+    st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
+    st.subheader("📊 Comptabilité Générale & Analytique (Normes SYSCOHADA / Style Sage)")
+    st.markdown("Consultez le **Journal des Écritures**, la **Balance Générale des Comptes** et générez manuellement des imputations comptables liées aux douanes et au transit.")
+
+    sous_tab_c1, sous_tab_c2, sous_tab_c3 = st.tabs(["📖 Journal des Écritures", "⚖️ Balance Générale", "✍️ Saisie d'une Écriture Manuelle"])
+
+    with sous_tab_c1:
+        st.markdown("##### 📜 Journal Général des Opérations")
+        conn = sqlite3.connect(DB_NAME)
+        df_ecritures = pd.read_sql_query("SELECT * FROM compta_ecritures ORDER BY id DESC", conn)
+        conn.close()
+        if df_ecritures.empty:
+            st.info("Aucune écriture comptable enregistrée pour le moment. Les paiements de caisse génèrent automatiquement des écritures.")
+        else:
+            st.dataframe(df_ecritures, use_container_width=True)
+
+    with sous_tab_c2:
+        st.markdown("##### ⚖️ Balance Générale des Comptes (SYSCOHADA)")
+        conn = sqlite3.connect(DB_NAME)
+        df_all = pd.read_sql_query("SELECT compte_debit, compte_credit, montant FROM compta_ecritures", conn)
+        conn.close()
+        
+        if df_all.empty:
+            st.info("Balance vide.")
+        else:
+            # Calcul des mouvements débits et crédits par compte
+            debits = df_all.groupby('compte_debit')['montant'].sum().reset_index()
+            debits.columns = ['Compte', 'Débit']
+            credits = df_all.groupby('compte_credit')['montant'].sum().reset_index()
+            credits.columns = ['Compte', 'Crédit']
+            
+            balance = pd.merge(debits, credits, on='Compte', how='outer').fillna(0)
+            balance['Solde Débiteur'] = balance.apply(lambda r: r['Débit'] - r['Crédit'] if r['Débit'] > r['Crédit'] else 0, axis=1)
+            balance['Solde Créditeur'] = balance.apply(lambda r: r['Crédit'] - r['Débit'] if r['Crédit'] >= r['Débit'] else 0, axis=1)
+            st.dataframe(balance, use_container_width=True)
+
+    with sous_tab_c3:
+        st.markdown("##### ✍️ Saisie d'une Écriture Comptable Personnalisée (Débit / Crédit)")
+        with st.form("form_saisie_compta"):
+            c_date = st.date_input("Date de l'écriture", value=datetime.now())
+            c_journal = st.selectbox("Code Journal", ["ACH - Journal des Achats", "VTE - Journal des Ventes", "BAN - Journal de Banque", "OD - Opérations Diverses"])
+            col_d, col_c = st.columns(2)
+            with col_d:
+                compte_deb = st.text_input("Compte Débit (ex: 601000 - Achats)", value="442000")
+                lib_deb = st.text_input("Libellé Débit", value="Droits de Douane / Débours")
+            with col_c:
+                compte_cred = st.text_input("Compte Crédit (ex: 521000 - Banque)", value="521000")
+                lib_cred = st.text_input("Libellé Crédit", value="Règlement Trésor Public")
+            
+            montant_ecriture = st.number_input("Montant de la transaction (FCFA)", min_value=1.0, value=150000.0)
+            piece_ref_input = st.text_input("Référence Pièce / Facture", value="FAC-OD-2026-001")
+            
+            btn_valider_ecriture = st.form_submit_button("Enregistrer l'écriture comptable")
+            
+            if btn_valider_ecriture:
+                conn = sqlite3.connect(DB_NAME)
+                conn.execute("""
+                    INSERT INTO compta_ecritures (date, journal, compte_debit, libelle_debit, compte_credit, libelle_credit, montant, piece_ref)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (c_date.strftime("%Y-%m-%d"), c_journal[:3], compte_deb, lib_deb, compte_cred, lib_cred, montant_ecriture, piece_ref_input))
+                conn.commit()
+                conn.close()
+                st.success("Écriture comptable enregistrée avec succès dans le journal !")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 with tab_edi:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("🔄 Passerelle EDI UN/EDIFACT (CUSDEC)")
-    st.markdown("Générez et simulez l'échange de messages EDI normalisés pour la douane.")
     conn = sqlite3.connect(DB_NAME)
     df_edi = pd.read_sql_query("SELECT id, client, article, fob_xof, regime FROM dossiers ORDER BY id DESC LIMIT 5", conn)
     conn.close()
     if not df_edi.empty:
-        edi_sel_id = st.selectbox("Choisir un dossier pour l'export EDI", df_edi['id'].tolist())
+        edi_sel_id = st.selectbox("Choisir un dossier pour l'export EDI", df_edi['id'].tolist(), key="edi_select_id")
         row_edi = df_edi[df_edi['id'] == edi_sel_id].iloc[0]
         
         def generer_message_edifact_cusdec(num_dossier, client, article, fob_xof, regime):
@@ -344,7 +456,6 @@ UNZ+1+00001'"""
 with tab_ocr:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("📄 Module IDP OCR Cross-Check (Vérification Facture)")
-    st.markdown("Simulez l'extraction automatique des données de factures fournisseurs par OCR.")
     uploaded_file = st.file_uploader("Importer une facture fournisseur (PDF ou Image)", type=["pdf", "png", "jpg", "jpeg"])
     if uploaded_file is not None:
         st.success("Fichier importé avec succès. Analyse OCR en cours...")
