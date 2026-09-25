@@ -1,5 +1,7 @@
 streamlit
 pandas
-requests
+plotly
 reportlab
+requests
+openpyxl
 groq
