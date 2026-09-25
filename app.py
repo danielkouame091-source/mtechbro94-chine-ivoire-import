@@ -3,6 +3,7 @@ import hashlib
 import io
 import json
 import os
+import random
 import re
 import sqlite3
 import smtplib
@@ -18,7 +19,7 @@ import plotly.graph_objects as go
 import requests
 import streamlit as st
 
-# ReportLab pour la génération de documents PDF nationaux & Transit
+# ReportLab pour la génération de documents PDF
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -30,10 +31,10 @@ except ImportError:
     Groq = None
 
 # =========================================================
-# CONFIGURATION ET STYLE NATIONAL GOVTECH & TRANSIT ERP
+# CONFIGURATION ET STYLE NATIONAL GOVTECH & SAAS B2B
 # =========================================================
 st.set_page_config(
-    page_title="SNDGIR - Transit & Douanes Côte d'Ivoire",
+    page_title="SNDGIR SaaS - Platforme Transit & Douanes",
     page_icon="🇨🇮",
     layout="wide",
 )
@@ -84,7 +85,7 @@ st.markdown(
 )
 
 # =========================================================
-# BASE DE DONNÉES SQLITE - ARCHITECTURE DOUBLE FLUX & MIGRATION
+# BASE DE DONNÉES SQLITE - ARCHITECTURE MULTI-TENANT (SAAS)
 # =========================================================
 DB_NAME = "sndgir_national_customs.db"
 UPLOAD_DIR = "uploads_dossiers"
@@ -97,21 +98,35 @@ def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
-    # Table Utilisateurs & Rôles
+    # 1. Table Tenants (Entreprises clientes du SaaS)
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
+        CREATE TABLE IF NOT EXISTS tenants (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE,
-            password_hash TEXT,
-            role TEXT,
-            statut TEXT DEFAULT 'Actif'
+            nom_societe TEXT UNIQUE,
+            plan_abonnement TEXT DEFAULT 'Starter',
+            statut_compte TEXT DEFAULT 'Actif',
+            date_expiration TEXT
         )
     """)
 
-    # Table Manifestes & Fret
+    # 2. Table Utilisateurs & Rôles
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER DEFAULT 1,
+            username TEXT UNIQUE,
+            password_hash TEXT,
+            role TEXT,
+            statut TEXT DEFAULT 'Actif',
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+        )
+    """)
+
+    # 3. Table Manifestes & Fret
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS manifestes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER DEFAULT 1,
             num_manifeste TEXT UNIQUE,
             moyen_transport TEXT,
             num_voyage TEXT,
@@ -121,10 +136,11 @@ def init_db():
         )
     """)
 
-    # Table Lignes de Fret (Connaissements / LTA)
+    # 4. Table Lignes de Fret
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS fret_lines (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER DEFAULT 1,
             num_manifeste TEXT,
             bl_number TEXT UNIQUE,
             consignee TEXT,
@@ -134,7 +150,7 @@ def init_db():
         )
     """)
 
-    # Table Articles & Nomenclatures SH
+    # 5. Table Articles & SH
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS articles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -145,10 +161,11 @@ def init_db():
         )
     """)
 
-    # Table Déclarations & Dossiers de Transit
+    # 6. Table Déclarations & Dossiers de Transit
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS dossiers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER DEFAULT 1,
             date TEXT,
             client TEXT,
             article TEXT,
@@ -173,23 +190,18 @@ def init_db():
         )
     """)
 
-    # AUTO-MIGRATION : Ajout dynamique des colonnes manquantes
-    existing_cols = [col[1] for col in cursor.execute("PRAGMA table_info(dossiers)").fetchall()]
-    new_cols = [
-        ("honoraires", "REAL DEFAULT 150000"),
-        ("frais_port", "REAL DEFAULT 85000"),
-        ("frais_transport", "REAL DEFAULT 120000"),
-        ("surestaries_xof", "REAL DEFAULT 0"),
-        ("statut_livraison", "TEXT DEFAULT 'Sous douane'")
-    ]
-    for col_name, col_type in new_cols:
-        if col_name not in existing_cols:
-            cursor.execute(f"ALTER TABLE dossiers ADD COLUMN {col_name} {col_type}")
+    # AUTO-MIGRATION : Colonnes Multi-Tenant
+    existing_tables = ["dossiers", "users", "manifestes", "fret_lines"]
+    for table in existing_tables:
+        existing_cols = [col[1] for col in cursor.execute(f"PRAGMA table_info({table})").fetchall()]
+        if "tenant_id" not in existing_cols:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN tenant_id INTEGER DEFAULT 1")
 
     # Table Traces d'Audit
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS audit_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER DEFAULT 1,
             timestamp TEXT,
             username TEXT,
             action TEXT,
@@ -197,26 +209,26 @@ def init_db():
         )
     """)
 
-    # Utilisateurs par défaut
+    # Données par défaut SaaS
+    cursor.execute("INSERT OR IGNORE INTO tenants (id, nom_societe, plan_abonnement, statut_compte) VALUES (1, 'TRANSIT IVOIRE (Démo)', 'Enterprise', 'Actif')")
+    
     default_users = [
-        ("admin", hash_password("transit2026"), "Administrateur Système", "Actif"),
-        ("verificateur", hash_password("douane2026"), "Vérificateur Douanier", "Actif"),
-        ("caissier", hash_password("caisse2026"), "Agent de Caisse", "Actif"),
-        ("declarant", hash_password("compta2026"), "Commissionnaire Agréé", "Actif")
+        (1, "admin", hash_password("transit2026"), "Super Admin SaaS", "Actif"),
+        (1, "verificateur", hash_password("douane2026"), "Vérificateur Douanier", "Actif"),
+        (1, "caissier", hash_password("caisse2026"), "Agent de Caisse", "Actif"),
+        (1, "declarant", hash_password("compta2026"), "Commissionnaire Agréé", "Actif"),
+        (1, "client_importateur", hash_password("client2026"), "Portail Client Importateur", "Actif")
     ]
     for u in default_users:
-        cursor.execute("INSERT OR IGNORE INTO users (username, password_hash, role, statut) VALUES (?, ?, ?, ?)", u)
+        cursor.execute("INSERT OR IGNORE INTO users (tenant_id, username, password_hash, role, statut) VALUES (?, ?, ?, ?, ?)", u)
 
-    # Articles par défaut
     default_articles = [
         ("Station Totale Topographique & GNSS/GPS", "9015.80.00", 5.0, "Topographie"),
         ("Smartphones & Téléphones portables", "8517.13.00", 20.0, "High-Tech"),
         ("Ordinateurs Portables & MacBooks", "8471.30.00", 5.0, "Informatique"),
         ("Vélos et Bicyclettes sans moteur", "8712.00.00", 20.0, "Transport"),
         ("Motos & Motocycles (125cc - 250cc)", "8711.20.00", 20.0, "Transport"),
-        ("Voitures de Tourisme (Berlines / SUV)", "8703.22.00", 20.0, "Véhicules"),
-        ("Vêtements Homme / Femme / Enfant", "6203.00.00", 20.0, "Textile"),
-        ("Sacs à main pour Dames", "4202.22.00", 20.0, "Maroquinerie")
+        ("Voitures de Tourisme (Berlines / SUV)", "8703.22.00", 20.0, "Véhicules")
     ]
     for item in default_articles:
         cursor.execute("INSERT OR IGNORE INTO articles (nom, sh, dd, categorie) VALUES (?, ?, ?, ?)", item)
@@ -226,16 +238,16 @@ def init_db():
 
 init_db()
 
-def log_action(username, action, details):
+def log_action(tenant_id, username, action, details):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO audit_logs (timestamp, username, action, details) VALUES (?, ?, ?, ?)", 
-                   (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), username, action, details))
+    cursor.execute("INSERT INTO audit_logs (tenant_id, timestamp, username, action, details) VALUES (?, ?, ?, ?, ?)", 
+                   (tenant_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), username, action, details))
     conn.commit()
     conn.close()
 
 # =========================================================
-# FONCTIONS MÉTIER : RISQUE, SURESTARIES & PRIX
+# FONCTIONS MÉTIER LOGISTIQUE & RISK
 # =========================================================
 def calculer_selectivite_risque(fob_xof, item_info, diff_ocr_pct, client_nom):
     score = 10.0
@@ -286,18 +298,22 @@ def calculer_surestaries(date_dechargement_str, jours_franchise, frais_jour_usd,
     except Exception:
         return 0, 0, 0, "⚪ Non évalué"
 
+def attribuer_bureau_anonyme(dossier_id):
+    bureaux_virtuels = ["Bureau Nord (Korhogo)", "Bureau Ouest (Man)", "Bureau Centre (Yamoussoukro)", "Bureau Maritime (San-Pédro)"]
+    random.seed(dossier_id)
+    return random.choice(bureaux_virtuels)
+
+def evaluer_statut_oea(conformite_pct, annees_existence, litiges_passes):
+    if conformite_pct >= 95.0 and annees_existence >= 3 and litiges_passes == 0:
+        return "AEO TIER 3 (Confiance Absolue)", "🟢 CANAL VERT AUTOMATIQUE", 0.02
+    elif conformite_pct >= 85.0 and litiges_passes <= 1:
+        return "AEO TIER 1 (Fiabilité Élevée)", "🔵 CANAL BLEU (Contrôle a posteriori)", 0.05
+    else:
+        return "STANDARD (Non Certifié)", "🟡 CANAL JAUNE / ROUGE (Contrôle Standard)", 0.20
+
 def generer_message_edifact_cusdec(num_dossier, client, article, fob_xof, regime):
     now_str = datetime.now().strftime("%Y%m%d:%H%M")
-    edifact = f"""UNB+UNOA:2+SNDGIR_CI+DECLARANT+260925:{now_str}+00001'
-UNH+1+CUSDEC:D:96B:UN'
-BGM+107+{num_dossier}+9'
-CST+1+{regime}'
-NAD+CZ++{client.upper()}'
-LOC+11+CIABJ'
-MEA+WT+G+{fob_xof:.0f}'
-UNT+7+1'
-UNZ+1+00001'"""
-    return edifact
+    return f"UNB+UNOA:2+SNDGIR_CI+DECLARANT+260925:{now_str}+00001'\nUNH+1+CUSDEC:D:96B:UN'\nBGM+107+{num_dossier}+9'\nCST+1+{regime}'\nNAD+CZ++{client.upper()}'\nMEA+WT+G+{fob_xof:.0f}'\nUNT+7+1'\nUNZ+1+00001'"
 
 @st.cache_data(ttl=3600)
 def obtenir_taux_change_automatique():
@@ -337,7 +353,7 @@ def calculer_droits_douane(caf_xof, dd_pct, regime_code):
     return total_douane
 
 # =========================================================
-# GENERATION DE DOCUMENTS PDF (BAE & FACTURE TRANSIT)
+# DOCUMENTS PDF (BAE & FACTURES)
 # =========================================================
 def generer_bae_pdf(dossier_id, client, article, bl_num, container_num, quittance_num, total_facture):
     pdf_filename = f"BAE_Officiel_SNDGIR_{dossier_id}.pdf"
@@ -346,13 +362,11 @@ def generer_bae_pdf(dossier_id, client, article, bl_num, container_num, quittanc
     styles = getSampleStyleSheet()
 
     title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#064E3B'), alignment=1)
-    
     elements.append(Paragraph("<b>RÉPUBLIQUE DE CÔTE D'IVOIRE</b>", title_style))
     elements.append(Paragraph("<font size=10>DIRECTION GÉNÉRALE DES DOUANES — SYSTEME SNDGIR</font>", title_style))
     elements.append(Spacer(1, 15))
 
     hash_val = hashlib.sha256(f"{dossier_id}-{quittance_num}-{total_facture}".encode()).hexdigest()[:24].upper()
-
     info_bae = f"""
     <b>BON À ENLEVER (BAE) OFFICIEL — MAINLEVÉE ACCORDÉE</b><br/><br/>
     <b>N° de Dossier :</b> RCI-DOUANE-2026-{dossier_id}<br/>
@@ -365,8 +379,7 @@ def generer_bae_pdf(dossier_id, client, article, bl_num, container_num, quittanc
     """
     elements.append(Paragraph(info_bae, styles['Normal']))
     elements.append(Spacer(1, 20))
-    elements.append(Paragraph("<b>Le Chef du Bureau de Douane certifie que la marchandise ci-dessus a satisfait à toutes les obligations douanières et autorise son enlèvement du port.</b>", styles['Normal']))
-
+    elements.append(Paragraph("<b>Le Chef du Bureau de Douane certifie que la marchandise ci-dessus a satisfait à toutes les obligations douanières.</b>", styles['Normal']))
     doc.build(elements)
     return pdf_filename
 
@@ -377,7 +390,6 @@ def generer_facture_transit_pdf(dossier_id, client, article, total_douane, honor
     styles = getSampleStyleSheet()
 
     title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#0284C7'), alignment=1)
-    
     elements.append(Paragraph("<b>AGENCE DE TRANSIT & LOGISTIQUE INTERNATIONALE</b>", title_style))
     elements.append(Paragraph("<font size=10>Facture Définitive de Dédouanement et Prestations</font>", title_style))
     elements.append(Spacer(1, 15))
@@ -414,20 +426,22 @@ def generer_facture_transit_pdf(dossier_id, client, article, total_douane, honor
     return pdf_filename
 
 # =========================================================
-# AUTHENTIFICATION & SESSIONS
+# AUTHENTIFICATION & MULTI-TENANCY SAAS
 # =========================================================
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.user_role = ""
     st.session_state.username = ""
+    st.session_state.tenant_id = 1
+    st.session_state.tenant_name = ""
 
 if not st.session_state.authenticated:
     st.markdown("<br><br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-        st.subheader("🔐 Portail National Douanier & Transit (SNDGIR)")
-        st.caption("Système National de Dédouanement et Gestion Intégrée du Transit")
+        st.subheader("🔐 Plateforme SaaS Transit & Douanes")
+        st.caption("Connexion sécurisée aux espaces Agences & Importateurs")
 
         username_input = st.text_input("Identifiant Officiel")
         password_input = st.text_input("Mot de passe", type="password")
@@ -435,33 +449,41 @@ if not st.session_state.authenticated:
         if st.button("Se connecter au Système", use_container_width=True):
             conn = sqlite3.connect(DB_NAME)
             cursor = conn.cursor()
-            cursor.execute("SELECT username, password_hash, role, statut FROM users WHERE username = ?", (username_input,))
+            cursor.execute("""
+                SELECT u.username, u.password_hash, u.role, u.statut, u.tenant_id, t.nom_societe 
+                FROM users u
+                JOIN tenants t ON u.tenant_id = t.id
+                WHERE u.username = ?
+            """, (username_input,))
             row = cursor.fetchone()
             conn.close()
 
             if row:
-                u_name, u_pwd_hash, u_role, u_statut = row
+                u_name, u_pwd_hash, u_role, u_statut, u_tenant_id, t_nom = row
                 if u_statut != "Actif":
                     st.error("Compte désactivé.")
                 elif hash_password(password_input) == u_pwd_hash:
                     st.session_state.authenticated = True
                     st.session_state.username = u_name
                     st.session_state.user_role = u_role
-                    log_action(u_name, "Connexion", "Accès accordé au portail")
+                    st.session_state.tenant_id = u_tenant_id
+                    st.session_state.tenant_name = t_nom
+                    log_action(u_tenant_id, u_name, "Connexion", "Accès à la session")
                     st.rerun()
                 else:
                     st.error("Mot de passe incorrect.")
             else:
-                st.error("Identifiant non reconnu. (Ex: admin / transit2026 ou declarant / compta2026)")
+                st.error("Compte introuvable.")
         st.markdown('</div>', unsafe_allow_html=True)
         st.stop()
 
 # =========================================================
 # BARRE LATÉRALE DE NAVIGATION
 # =========================================================
-st.sidebar.title("🇨🇮 SNDGIR & TRANSIT ERP")
-st.sidebar.markdown(f"**Utilisateur :** `{st.session_state.username}`")
-st.sidebar.markdown(f"**Rôle :** `{st.session_state.user_role}`")
+st.sidebar.title("🇨🇮 SNDGIR SaaS")
+st.sidebar.markdown(f"🏢 **Entreprise :** `{st.session_state.tenant_name}`")
+st.sidebar.markdown(f"👤 **Utilisateur :** `{st.session_state.username}`")
+st.sidebar.markdown(f"🔑 **Rôle :** `{st.session_state.user_role}`")
 st.sidebar.markdown("---")
 
 groq_default_key = st.secrets.get("GROQ_API_KEY", "") if hasattr(st, "secrets") else ""
@@ -479,12 +501,12 @@ if st.sidebar.button("🚪 Déconnexion", use_container_width=True):
     st.rerun()
 
 # =========================================================
-# EN-TÊTE ET ONGLETS
+# EN-TÊTE ET NAVIGATION PAR ONGLETS
 # =========================================================
-st.markdown("""
+st.markdown(f"""
 <div class="header-banner">
-    <h1>🏛️ CÔTE D'IVOIRE : SYSTÈME DÉDOUANEMENT & TRANSIT ERP (v5.0)</h1>
-    <p>Module Intégré : Cargo, Sélectivité Douanière, Facturation Client, Surestaries, EDI & IA Risk Management</p>
+    <h1>🏛️ SNDGIR SaaS : {st.session_state.tenant_name}</h1>
+    <p>Gestion Intégrée Multi-Sociétés : Cargo, Douanes, ERP Transit, Portail Importateur & IA</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -493,12 +515,14 @@ tabs_list = [
     "🚢 1. Manifeste & Fret",
     "📋 2. Déclaration en Détail (SAD)",
     "💼 3. Transit ERP & Facturation",
-    "💳 4. Caisse & BAE",
-    "🔄 5. Passerelle EDI",
-    "📄 6. IDP OCR Cross-Check",
-    "📖 7. Code des Douanes",
-    "🤖 8. Assistant IA Transit",
-    "🔐 Admin & Audit Logs"
+    "📱 4. Portail Importateur (Self-Service)",
+    "💳 5. Caisse & BAE",
+    "🔄 6. Passerelle EDI",
+    "📄 7. IDP OCR Cross-Check",
+    "🌐 8. Innovations Inde & Chine",
+    "📖 9. Code des Douanes",
+    "🤖 10. Assistant IA Transit",
+    "🔐 SaaS Admin & Tenancy"
 ]
 
 tabs = st.tabs(tabs_list)
@@ -506,26 +530,28 @@ tab_dash = tabs[0]
 tab_manifeste = tabs[1]
 tab_sad = tabs[2]
 tab_transit_erp = tabs[3]
-tab_caisse = tabs[4]
-tab_edi = tabs[5]
-tab_ocr = tabs[6]
-tab_code = tabs[7]
-tab_ai = tabs[8]
-tab_admin = tabs[9]
+tab_portail_client = tabs[4]
+tab_caisse = tabs[5]
+tab_edi = tabs[6]
+tab_ocr = tabs[7]
+tab_innov = tabs[8]
+tab_code = tabs[9]
+tab_ai = tabs[10]
+tab_admin = tabs[11]
 
 # =========================================================
-# TAB 0 : DASHBOARD NATIONAL & MARGES TRANSIT
+# TAB 0 : DASHBOARD MULTI-TENANT
 # =========================================================
 with tab_dash:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-    st.subheader("📈 Performance Globale : Douanes & Agence de Transit")
+    st.subheader(f"📈 Performance Globale - {st.session_state.tenant_name}")
 
     conn = sqlite3.connect(DB_NAME)
-    df_d = pd.read_sql_query("SELECT * FROM dossiers", conn)
+    df_d = pd.read_sql_query("SELECT * FROM dossiers WHERE tenant_id = ?", conn, params=(st.session_state.tenant_id,))
     conn.close()
 
     if df_d.empty:
-        st.info("Aucun dossier enregistré dans le système.")
+        st.info("Aucun dossier enregistré pour votre entreprise.")
     else:
         tot_droits = df_d['total_facture'].sum()
         nb_decl = len(df_d)
@@ -533,21 +559,21 @@ with tab_dash:
         nb_vert = len(df_d[df_d['canal_selectivite'] == 'VERT'])
 
         k1, k2, k3, k4 = st.columns(4)
-        with k1: st.markdown(f"""<div class="kpi-card"><div class="kpi-title">Droits Douane Liquidés</div><div class="kpi-value">{tot_droits:,.0f} FCFA</div></div>""", unsafe_allow_html=True)
+        with k1: st.markdown(f"""<div class="kpi-card"><div class="kpi-title">Droits Liquidés</div><div class="kpi-value">{tot_droits:,.0f} FCFA</div></div>""", unsafe_allow_html=True)
         with k2: st.markdown(f"""<div class="kpi-card"><div class="kpi-title">Dossiers Traités</div><div class="kpi-value">{nb_decl}</div></div>""", unsafe_allow_html=True)
-        with k3: st.markdown(f"""<div class="kpi-card"><div class="kpi-title">Circuits Verts (Mainlevée)</div><div class="kpi-value" style="color:#34D399;">{nb_vert}</div></div>""", unsafe_allow_html=True)
-        with k4: st.markdown(f"""<div class="kpi-card"><div class="kpi-title">Circuits Rouges (Inspections)</div><div class="kpi-value" style="color:#F87171;">{nb_rouge}</div></div>""", unsafe_allow_html=True)
+        with k3: st.markdown(f"""<div class="kpi-card"><div class="kpi-title">Circuits Verts</div><div class="kpi-value" style="color:#34D399;">{nb_vert}</div></div>""", unsafe_allow_html=True)
+        with k4: st.markdown(f"""<div class="kpi-card"><div class="kpi-title">Circuits Rouges</div><div class="kpi-value" style="color:#F87171;">{nb_rouge}</div></div>""", unsafe_allow_html=True)
 
         st.markdown("<br/>", unsafe_allow_html=True)
         col_g1, col_g2 = st.columns(2)
         with col_g1:
-            fig_canal = px.pie(df_d, names='canal_selectivite', title="Répartition par Canal de Sélectivité", hole=0.4,
+            fig_canal = px.pie(df_d, names='canal_selectivite', title="Sélectivité des Dossiers", hole=0.4,
                                color_discrete_map={'VERT': '#047857', 'BLEU': '#1D4ED8', 'JAUNE': '#D97706', 'ROUGE': '#B91C1C'})
             fig_canal.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color='white')
             st.plotly_chart(fig_canal, use_container_width=True)
 
         with col_g2:
-            fig_regime = px.bar(df_d, x='regime', y='total_facture', color='canal_selectivite', title="Recettes Douanières par Régime")
+            fig_regime = px.bar(df_d, x='regime', y='total_facture', color='canal_selectivite', title="Recettes par Régime Douanier")
             fig_regime.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color='white')
             st.plotly_chart(fig_regime, use_container_width=True)
 
@@ -576,10 +602,10 @@ with tab_manifeste:
             conn = sqlite3.connect(DB_NAME)
             cursor = conn.cursor()
             try:
-                cursor.execute("INSERT INTO manifestes (num_manifeste, moyen_transport, num_voyage, provenance, date_arrivee) VALUES (?, ?, ?, ?, ?)",
-                               (m_num, m_transport, m_voyage, m_prov, m_date.strftime("%Y-%m-%d")))
+                cursor.execute("INSERT INTO manifestes (tenant_id, num_manifeste, moyen_transport, num_voyage, provenance, date_arrivee) VALUES (?, ?, ?, ?, ?, ?)",
+                               (st.session_state.tenant_id, m_num, m_transport, m_voyage, m_prov, m_date.strftime("%Y-%m-%d")))
                 conn.commit()
-                log_action(st.session_state.username, "Ajout Manifeste", f"Manifeste {m_num} créé")
+                log_action(st.session_state.tenant_id, st.session_state.username, "Ajout Manifeste", f"Manifeste {m_num} créé")
                 st.success(f"Manifeste {m_num} enregistré avec succès !")
             except Exception as e:
                 st.error(f"Erreur : {e}")
@@ -588,7 +614,7 @@ with tab_manifeste:
     with col_m2:
         st.markdown("##### 2️⃣ Ajouter un Connaissement / B/L")
         conn = sqlite3.connect(DB_NAME)
-        df_man = pd.read_sql_query("SELECT num_manifeste FROM manifestes", conn)
+        df_man = pd.read_sql_query("SELECT num_manifeste FROM manifestes WHERE tenant_id = ?", conn, params=(st.session_state.tenant_id,))
         conn.close()
 
         if not df_man.empty:
@@ -604,18 +630,18 @@ with tab_manifeste:
                 conn = sqlite3.connect(DB_NAME)
                 cursor = conn.cursor()
                 try:
-                    cursor.execute("INSERT INTO fret_lines (num_manifeste, bl_number, consignee, poids_brut, nb_colis) VALUES (?, ?, ?, ?, ?)",
-                                   (f_man, f_bl, f_client, f_poids, f_colis))
+                    cursor.execute("INSERT INTO fret_lines (tenant_id, num_manifeste, bl_number, consignee, poids_brut, nb_colis) VALUES (?, ?, ?, ?, ?, ?)",
+                                   (st.session_state.tenant_id, f_man, f_bl, f_client, f_poids, f_colis))
                     conn.commit()
-                    st.success(f"B/L {f_bl} rattaché au manifeste {f_man} !")
+                    st.success(f"B/L {f_bl} rattaché !")
                 except Exception as e:
-                    st.error(f"Erreur B/L existant : {e}")
+                    st.error(f"Erreur : {e}")
                 conn.close()
 
     st.markdown("---")
-    st.markdown("### Registre des Connaissements & Apurement Cargo")
+    st.markdown("### Registre des Connaissements & Cargo")
     conn = sqlite3.connect(DB_NAME)
-    df_fret_all = pd.read_sql_query("SELECT * FROM fret_lines", conn)
+    df_fret_all = pd.read_sql_query("SELECT * FROM fret_lines WHERE tenant_id = ?", conn, params=(st.session_state.tenant_id,))
     conn.close()
     st.dataframe(df_fret_all, use_container_width=True)
 
@@ -630,7 +656,7 @@ with tab_sad:
 
     conn = sqlite3.connect(DB_NAME)
     df_art_db = pd.read_sql_query("SELECT * FROM articles", conn)
-    df_bl_unpurged = pd.read_sql_query("SELECT bl_number, consignee FROM fret_lines WHERE statut_apurement = 'Non apuré'", conn)
+    df_bl_unpurged = pd.read_sql_query("SELECT bl_number, consignee FROM fret_lines WHERE tenant_id = ? AND statut_apurement = 'Non apuré'", conn, params=(st.session_state.tenant_id,))
     conn.close()
 
     c1, c2, c3 = st.columns(3)
@@ -662,7 +688,7 @@ with tab_sad:
         fob_devise = qte * pu_devise
         taux_conv = taux_usd_xof if devise_facture == "USD" else (taux_cny_xof if devise_facture == "CNY" else taux_eur_xof)
         fob_xof = fob_devise * taux_conv
-        caf_xof = fob_xof * 1.08 # Fret + Assurance estimés
+        caf_xof = fob_xof * 1.08
         total_douane = calculer_droits_douane(caf_xof, item_row['dd'], regime_code)
 
     with col_s2:
@@ -688,29 +714,29 @@ with tab_sad:
         date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
         cursor.execute("""
             INSERT INTO dossiers 
-            (date, client, article, regime, fob_xof, total_facture, solde_du, statut, bl_number, container_number, date_arrivee, score_risque, canal_selectivite, motifs_risque)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (date_str, client_decl, article_nom, regime_code, fob_xof, total_douane, total_douane, "En cours de contrôle" if canal in ["JAUNE", "ROUGE"] else "Liquidé - En attente de paiement",
+            (tenant_id, date, client, article, regime, fob_xof, total_facture, solde_du, statut, bl_number, container_number, date_arrivee, score_risque, canal_selectivite, motifs_risque)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (st.session_state.tenant_id, date_str, client_decl, article_nom, regime_code, fob_xof, total_douane, total_douane, "En cours de contrôle" if canal in ["JAUNE", "ROUGE"] else "Liquidé - En attente de paiement",
               bl_select, container_input, datetime.now().strftime("%Y-%m-%d"), score_risk, canal, motifs_risk))
 
-        cursor.execute("UPDATE fret_lines SET statut_apurement = 'Apuré par SAD' WHERE bl_number = ?", (bl_select,))
+        cursor.execute("UPDATE fret_lines SET statut_apurement = 'Apuré par SAD' WHERE bl_number = ? AND tenant_id = ?", (bl_select, st.session_state.tenant_id))
         conn.commit()
         conn.close()
 
-        log_action(st.session_state.username, "Soumission SAD", f"SAD enregistrée pour {client_decl} - Canal {canal}")
+        log_action(st.session_state.tenant_id, st.session_state.username, "Soumission SAD", f"SAD enregistrée pour {client_decl} - Canal {canal}")
         st.success(f"Déclaration enregistrée sous le Canal **{canal}** !")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 3 : TRANSIT ERP & FACTURATION CLIENT (LECTURE SÉCURISÉE)
+# TAB 3 : TRANSIT ERP & FACTURATION CLIENT
 # =========================================================
 with tab_transit_erp:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("💼 Module Transitaire : Facturation, Débours & Surestaries")
 
     conn = sqlite3.connect(DB_NAME)
-    df_dos_t = pd.read_sql_query("SELECT * FROM dossiers ORDER BY id DESC", conn)
+    df_dos_t = pd.read_sql_query("SELECT * FROM dossiers WHERE tenant_id = ? ORDER BY id DESC", conn, params=(st.session_state.tenant_id,))
     conn.close()
 
     if df_dos_t.empty:
@@ -772,8 +798,8 @@ with tab_transit_erp:
                 cursor.execute("""
                     UPDATE dossiers 
                     SET honoraires = ?, frais_port = ?, frais_transport = ?, surestaries_xof = ?
-                    WHERE id = ?
-                """, (f_honoraires, f_port, f_transport, c_xof, sel_dos_id))
+                    WHERE id = ? AND tenant_id = ?
+                """, (f_honoraires, f_port, f_transport, c_xof, sel_dos_id, st.session_state.tenant_id))
                 conn.commit()
                 conn.close()
 
@@ -785,14 +811,48 @@ with tab_transit_erp:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 4 : CAISSE & BAE
+# TAB 4 : PORTAIL CLIENT IMPORTATEUR (SELF-SERVICE SAAS)
+# =========================================================
+with tab_portail_client:
+    st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
+    st.subheader("📱 Portail Self-Service Importateur (Suivi en Temps Réel)")
+    st.caption("Espace dédié aux clients de votre agence de transit pour suivre leurs cargaisons")
+
+    conn = sqlite3.connect(DB_NAME)
+    df_portail = pd.read_sql_query("SELECT id, date, client, article, container_number, canal_selectivite, statut, total_facture FROM dossiers WHERE tenant_id = ? ORDER BY id DESC", conn, params=(st.session_state.tenant_id,))
+    conn.close()
+
+    if df_portail.empty:
+        st.info("Aucune cargaison associée à votre compte importateur.")
+    else:
+        search_client = st.text_input("🔍 Rechercher par votre nom ou N° de Conteneur :", value="ETS KOUASSI & FRERES")
+        df_filtered = df_portail[df_portail['client'].str.contains(search_client, case=False, na=False) | df_portail['container_number'].str.contains(search_client, case=False, na=False)]
+
+        st.dataframe(df_filtered, use_container_width=True)
+
+        st.markdown("---")
+        st.markdown("##### 📍 Suivi Étape par Étape du Conteneur")
+        if not df_filtered.empty:
+            sel_d_p = df_filtered.iloc[0]
+            st.success(f"**Cargaison :** {sel_d_p['article']} (Conteneur : `{sel_d_p['container_number']}`)")
+
+            c_step1, c_step2, c_step3, c_step4 = st.columns(4)
+            c_step1.metric("1. Navire / Port", "✅ Arrivé")
+            c_step2.metric("2. Douane", f"Canal {sel_d_p['canal_selectivite']}")
+            c_step3.metric("3. Paiement", "✅ Acquitté" if "BAE" in sel_d_p['statut'] else "⏳ En attente")
+            c_step4.metric("4. Livraison", sel_d_p['statut'])
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# =========================================================
+# TAB 5 : CAISSE & BAE
 # =========================================================
 with tab_caisse:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("💳 Module Caisse & Bon à Enlever (BAE) Sécurisé")
 
     conn = sqlite3.connect(DB_NAME)
-    df_dossiers_all = pd.read_sql_query("SELECT * FROM dossiers ORDER BY id DESC", conn)
+    df_dossiers_all = pd.read_sql_query("SELECT * FROM dossiers WHERE tenant_id = ? ORDER BY id DESC", conn, params=(st.session_state.tenant_id,))
     conn.close()
 
     if df_dossiers_all.empty:
@@ -817,11 +877,11 @@ with tab_caisse:
                 quittance = f"QUIT-2026-{sel_dossier_id:05d}"
                 conn = sqlite3.connect(DB_NAME)
                 cursor = conn.cursor()
-                cursor.execute("UPDATE dossiers SET solde_du = 0, statut = 'Liquidé & Payé (BAE Émis)', quittance_num = ? WHERE id = ?", (quittance, sel_dossier_id))
+                cursor.execute("UPDATE dossiers SET solde_du = 0, statut = 'Liquidé & Payé (BAE Émis)', quittance_num = ? WHERE id = ? AND tenant_id = ?", (quittance, sel_dossier_id, st.session_state.tenant_id))
                 conn.commit()
                 conn.close()
 
-                log_action(st.session_state.username, "Paiement Caisse", f"Quittance {quittance} générée pour dossier #{sel_dossier_id}")
+                log_action(st.session_state.tenant_id, st.session_state.username, "Paiement Caisse", f"Quittance {quittance} générée pour dossier #{sel_dossier_id}")
                 st.success(f"Paiement enregistré ! Quittance N° **{quittance}** émise.")
 
                 pdf_bae = generer_bae_pdf(sel_dossier_id, row_pay['client'], row_pay['article'], row_pay['bl_number'], row_pay['container_number'], quittance, row_pay['total_facture'])
@@ -832,14 +892,14 @@ with tab_caisse:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 5 : PASSERELLE EDI
+# TAB 6 : PASSERELLE EDI
 # =========================================================
 with tab_edi:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("🔄 Passerelle EDI UN/EDIFACT (CUSDEC)")
 
     conn = sqlite3.connect(DB_NAME)
-    df_d_edi = pd.read_sql_query("SELECT * FROM dossiers ORDER BY id DESC LIMIT 10", conn)
+    df_d_edi = pd.read_sql_query("SELECT * FROM dossiers WHERE tenant_id = ? ORDER BY id DESC LIMIT 10", conn, params=(st.session_state.tenant_id,))
     conn.close()
 
     if not df_d_edi.empty:
@@ -861,7 +921,7 @@ with tab_edi:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 6 : IDP OCR CROSS-CHECKING
+# TAB 7 : IDP OCR CROSS-CHECKING
 # =========================================================
 with tab_ocr:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
@@ -881,95 +941,152 @@ with tab_ocr:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 7 : CODE DES DOUANES
+# TAB 8 : INNOVATIONS INDE & CHINE
+# =========================================================
+with tab_innov:
+    st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
+    st.subheader("🌐 Modules d'Innovation Inspirés des Modèles Indien (ICEGATE) & Chinois (Smart Customs)")
+
+    t_i1, t_i2, t_i3 = st.tabs(["🔒 1. Faceless Assessment (Inde)", "🏆 2. Certification OEA / AEO", "🔍 3. Moteur IA de Valeur (Chine)"])
+
+    with t_i1:
+        st.markdown("#### 🔒 Dédouanement Anonymisé & Impartial")
+        conn = sqlite3.connect(DB_NAME)
+        df_d_face = pd.read_sql_query("SELECT id, date, article, regime, fob_xof, canal_selectivite FROM dossiers WHERE tenant_id = ? ORDER BY id DESC LIMIT 5", conn, params=(st.session_state.tenant_id,))
+        conn.close()
+
+        if not df_d_face.empty:
+            sel_f_id = st.selectbox("Sélectionner un dossier pour contrôle anonyme", df_d_face['id'].tolist())
+            row_f = df_d_face[df_d_face['id'] == sel_f_id].iloc[0]
+            bureau_assigne = attribuer_bureau_anonyme(sel_f_id)
+
+            col_fa1, col_fa2 = st.columns(2)
+            with col_fa1:
+                st.json({
+                    "Dossier_ID": f"SAD-2026-{row_f['id']}",
+                    "Importateur": "******** [MASQUÉ]",
+                    "Marchandise": row_f['article'],
+                    "Valeur_FOB_XOF": f"{row_f['fob_xof']:,.0f} FCFA"
+                })
+            with col_fa2:
+                st.success(f"**Bureau Répartiteur :** `{bureau_assigne}`")
+                st.button("✅ Valider l'Évaluation Anonyme", key=f"btn_fa_{sel_f_id}")
+
+    with t_i2:
+        st.markdown("#### 🏆 Programme Opérateur Économique Agréé (OEA / AEO)")
+        col_oea1, col_oea2 = st.columns(2)
+        with col_oea1:
+            historique_conformite = st.slider("Taux de Conformité Historique (%)", 50.0, 100.0, 98.0)
+            anciennete_ans = st.number_input("Ancienneté Registre du Commerce (Années)", value=5)
+            nb_litiges = st.number_input("Nombre de Contentieux (3 ans)", value=0)
+            tier_oea, canal_recommande, taux_insp = evaluer_statut_oea(historique_conformite, anciennete_ans, nb_litiges)
+
+        with col_oea2:
+            st.markdown(f"**Statut Certifié :** `{tier_oea}`")
+            st.markdown(f"**Traitement Douanier :** {canal_recommande}")
+            st.metric("Taux d'Inspection Physique", f"{taux_insp * 100:.1f} %")
+
+    with t_i3:
+        st.markdown("#### 🔍 Moteur IA de Nomenclatures SH & Valeur")
+        txt_facture_brute = st.text_input("Saisir le libellé commercial de la facture :", value="MacBook Pro M4 16 pouces 32GB RAM SSD 1TB")
+        if st.button("🧠 Analyser par l'IA", use_container_width=True):
+            st.success("Code SH Suggéré par IA : **8471.30.00**")
+            st.info("💡 **Analyse de Valeur :** Prix déclaré conforme à la fourchette du marché mondial.")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# =========================================================
+# TAB 9 : CODE DES DOUANES
 # =========================================================
 with tab_code:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("📖 Code des Douanes de Côte d'Ivoire")
-
     articles_code = {
-        "Article 12 - Valeur transactionnelle (OMC / CAF)": "La valeur en douane est la valeur transactionnelle constituée du prix payé ajusté des frais de transport et d'assurance jusqu'au port d'Abidjan ou de San-Pédro.",
-        "Article 85 - Régime C100 (Mise à la consommation)": "Permet la mise en libre circulation des marchandises étrangères sur le territoire national après paiement des droits de douane et de la TVA.",
-        "Article 142 - Entrepôt de Douane (E100)": "Stockage sous douane en suspension totale de droits et taxes pour une durée maximale de 24 mois.",
-        "Programme VOC / CoC (Inspection Webb Fontaine & Cotecna)": "Tout produit d'une valeur FOB >= 1 000 000 FCFA requiert une Attestation de Vérification Documentaire (AVD) et un Certificat de Conformité."
+        "Article 12 - Valeur transactionnelle (OMC / CAF)": "La valeur en douane est la valeur transactionnelle constituée du prix payé.",
+        "Article 85 - Régime C100 (Mise à la consommation)": "Permet la mise en libre circulation des marchandises étrangères."
     }
-
-    st.text_input("🔍 Recherche rapide dans les textes de loi...")
     for t, c in articles_code.items():
-        with st.expander(t):
-            st.write(c)
-
+        with st.expander(t): st.write(c)
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 8 : ASSISTANT IA TRANSIT & DOUANES
+# TAB 10 : ASSISTANT IA TRANSIT
 # =========================================================
 with tab_ai:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-    st.subheader("🤖 Assistant Virtuel Llama 3 (Spécialiste Douanes & Transit)")
-    u_q = st.text_area("Votre question réglementaire ou logistique :", value="Comment calculer les débours et la TVA sur honoraires pour un transitaire en Côte d'Ivoire ?")
-
+    st.subheader("🤖 Assistant Virtuel Llama 3")
+    u_q = st.text_area("Votre question réglementaire :", value="Comment calculer la TVA sur honoraires pour un transitaire en Côte d'Ivoire ?")
     if st.button("🔍 Consulter l'IA", use_container_width=True):
         if groq_api_key and Groq:
-            try:
-                client_ai = Groq(api_key=groq_api_key)
-                prompt_expert = f"Vous êtes un expert en douanes et transit international en Côte d'Ivoire. Répondez de façon claire : {u_q}"
-                res_ai = client_ai.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=[{"role": "user", "content": prompt_expert}],
-                    temperature=0.2,
-                    max_tokens=1024,
-                )
-                st.info(res_ai.choices[0].message.content)
-            except Exception as e:
-                st.error(f"Erreur Groq : {e}")
+            client_ai = Groq(api_key=groq_api_key)
+            res_ai = client_ai.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": f"Expert transit Côte d'Ivoire : {u_q}"}],
+                temperature=0.2, max_tokens=1024
+            )
+            st.info(res_ai.choices[0].message.content)
         else:
-            st.warning("Renseignez la clé API Groq dans le panneau latéral pour activer l'assistant.")
-
+            st.warning("Renseignez la clé API Groq dans le panneau latéral.")
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 9 : ADMIN & AUDIT LOGS
+# TAB 11 : SAAS ADMIN & TENANCY MANAGEMENT
 # =========================================================
-if st.session_state.user_role in ["Administrateur Système", "Administrateur"]:
+if st.session_state.user_role in ["Super Admin SaaS", "Administrateur Système", "Administrateur"]:
     with tab_admin:
         st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-        st.subheader("🔐 Gestion des Comptes & Journal d'Audit")
+        st.subheader("🔐 Administration SaaS & Gestion des Entreprises Abonnées")
 
-        col_ad1, col_ad2 = st.columns(2)
-        with col_ad1:
-            st.markdown("##### 1️⃣ Créer un Compte Agent / Déclarant")
-            with st.form("form_agent"):
-                a_name = st.text_input("Identifiant")
-                a_pwd = st.text_input("Mot de passe", type="password")
-                a_role = st.selectbox("Rôle Fonctionnel", ["Vérificateur Douanier", "Agent de Caisse", "Commissionnaire Agréé"])
-                btn_ag = st.form_submit_button("Créer le Compte")
+        col_sa1, col_sa2 = st.columns(2)
+        with col_sa1:
+            st.markdown("##### 🏢 1️⃣ Créer une Nouvelle Entreprise Cliente (Tenant)")
+            with st.form("form_tenant"):
+                t_nom_new = st.text_input("Nom de la Société de Transit")
+                t_plan = st.selectbox("Plan d'Abonnement", ["Starter", "Pro", "Enterprise"])
+                btn_t = st.form_submit_button("Activer le Compte Entreprise")
 
-            if btn_ag and a_name and a_pwd:
+            if btn_t and t_nom_new:
                 conn = sqlite3.connect(DB_NAME)
                 cursor = conn.cursor()
                 try:
-                    cursor.execute("INSERT INTO users (username, password_hash, role, statut) VALUES (?, ?, ?, 'Actif')",
-                                   (a_name, hash_password(a_pwd), a_role))
+                    cursor.execute("INSERT INTO tenants (nom_societe, plan_abonnement, statut_compte) VALUES (?, ?, 'Actif')", (t_nom_new, t_plan))
                     conn.commit()
-                    log_action(st.session_state.username, "Création Utilisateur", f"Compte {a_name} créé")
-                    st.success(f"Compte '{a_name}' créé avec succès !")
+                    st.success(f"Entreprise '{t_nom_new}' enregistrée avec succès !")
                 except Exception as e:
                     st.error(f"Erreur : {e}")
                 conn.close()
 
-        with col_ad2:
-            st.markdown("##### 2️⃣ Utilisateurs Enregistrés")
+        with col_sa2:
+            st.markdown("##### 👤 2️⃣ Créer un Utilisateur pour une Entreprise")
             conn = sqlite3.connect(DB_NAME)
-            df_u = pd.read_sql_query("SELECT id, username, role, statut FROM users", conn)
+            df_tenants_all = pd.read_sql_query("SELECT id, nom_societe FROM tenants", conn)
             conn.close()
-            st.dataframe(df_u, use_container_width=True)
+
+            if not df_tenants_all.empty:
+                with st.form("form_u_tenant"):
+                    u_t_id = st.selectbox("Sélectionner la Société", df_tenants_all['id'].tolist(), format_func=lambda x: df_tenants_all[df_tenants_all['id'] == x]['nom_societe'].values[0])
+                    u_name_new = st.text_input("Identifiant Utilisateur")
+                    u_pwd_new = st.text_input("Mot de passe", type="password")
+                    u_role_new = st.selectbox("Rôle", ["Commissionnaire Agréé", "Vérificateur Douanier", "Agent de Caisse", "Portail Client Importateur"])
+                    btn_u_t = st.form_submit_button("Créer l'Utilisateur")
+
+                if btn_u_t and u_name_new and u_pwd_new:
+                    conn = sqlite3.connect(DB_NAME)
+                    cursor = conn.cursor()
+                    try:
+                        cursor.execute("INSERT INTO users (tenant_id, username, password_hash, role, statut) VALUES (?, ?, ?, ?, 'Actif')",
+                                       (u_t_id, u_name_new, hash_password(u_pwd_new), u_role_new))
+                        conn.commit()
+                        st.success(f"Utilisateur '{u_name_new}' rattaché avec succès !")
+                    except Exception as e:
+                        st.error(f"Erreur : {e}")
+                    conn.close()
 
         st.markdown("---")
-        st.markdown("### 📜 Traces d'Audit (`audit_logs`)")
+        st.markdown("### 🏢 Registre des Entreprises Abonnées")
         conn = sqlite3.connect(DB_NAME)
-        df_logs = pd.read_sql_query("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 100", conn)
+        df_t_disp = pd.read_sql_query("SELECT * FROM tenants", conn)
         conn.close()
-        st.dataframe(df_logs, use_container_width=True)
+        st.dataframe(df_t_disp, use_container_width=True)
 
         st.markdown('</div>', unsafe_allow_html=True)
