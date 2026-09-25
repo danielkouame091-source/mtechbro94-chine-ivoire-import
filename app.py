@@ -188,11 +188,42 @@ groq_api_key = st.sidebar.text_input("🔑 Clé API Groq Llama 3", value=groq_de
 st.sidebar.subheader("💱 Taux de Change Officiels"); st.sidebar.caption(status_api_devises)
 taux_cny_xof = st.sidebar.number_input("1 CNY (Chine)", value=taux_devises_dict["CNY"], step=0.1); taux_usd_xof = st.sidebar.number_input("1 USD (Dollar)", value=taux_devises_dict["USD"], step=1.0); taux_eur_xof = st.sidebar.number_input("1 EUR (Euro)", value=taux_devises_dict["EUR"], step=0.1)
 st.sidebar.markdown("---")
+
+# --- WIDGET FLOTTANT POUR L'ASSISTANT IA DANS LA SIDEBAR ---
+with st.sidebar:
+    st.subheader("🤖 Assistant IA Douanier Flottant")
+    with st.popover("💬 Ouvrir le Chatbot IA", use_container_width=True):
+        st.markdown("##### Assistant Virtuel SNDGIR")
+        prompt_ia = st.text_area("Posez votre question réglementaire :", value="Quelles sont les conditions d'exonération pour le matériel topographique ?", key="ai_prompt_floating")
+        
+        if st.button("Interroger l'IA", key="btn_submit_ai_floating", use_container_width=True):
+            if not groq_api_key:
+                st.error("Veuillez configurer votre clé API Groq.")
+            elif Groq is None:
+                st.error("Le package `groq` n'est pas installé.")
+            else:
+                try:
+                    client_groq = Groq(api_key=groq_api_key)
+                    response = client_groq.chat.completions.create(
+                        model="llama3-70b-8192",
+                        messages=[
+                            {"role": "system", "content": "Vous êtes un expert supérieur des douanes et du commerce international en Côte d'Ivoire."},
+                            {"role": "user", "content": prompt_ia},
+                        ],
+                    )
+                    st.markdown("##### 💡 Réponse de l'Expert IA :")
+                    st.write(response.choices[0].message.content)
+                except Exception as e:
+                    st.error(f"Erreur lors de l'appel à l'API Groq : {e}")
+
+st.sidebar.markdown("---")
 if st.sidebar.button("🚪 Déconnexion", use_container_width=True): st.session_state.authenticated = False; st.rerun()
 
 st.markdown("""<div class="header-banner"><h1>🏛️ CÔTE D'IVOIRE : SYSTÈME DÉDOUANEMENT & TRANSIT ERP (v5.0)</h1><p>Module Intégré : Cargo, Sélectivité Douanière, Facturation Client, Surestaries, EDI, Innovations Inde/Chine & IA</p></div>""", unsafe_allow_html=True)
-tabs_list = ["📈 Dashboard & Marges", "🚢 1. Manifeste & Fret", "📋 2. Déclaration en Détail (SAD)", "💼 3. Transit ERP & Facturation", "💳 4. Caisse & BAE", "🔄 5. Passerelle EDI", "📄 6. IDP OCR Cross-Check", "🌐 7. Innovations Inde & Chine", "📖 8. Code des Douanes", "🤖 9. Assistant IA Transit", "🔐 Admin & Audit Logs"]
-tabs = st.tabs(tabs_list); tab_dash, tab_manifeste, tab_sad, tab_transit_erp, tab_caisse, tab_edi, tab_ocr, tab_innov, tab_code, tab_ai, tab_admin = tabs
+
+# L'onglet IA a été retiré de la liste principale et transformé en widget flottant ci-dessus
+tabs_list = ["📈 Dashboard & Marges", "🚢 1. Manifeste & Fret", "📋 2. Déclaration en Détail (SAD)", "💼 3. Transit ERP & Facturation", "💳 4. Caisse & BAE", "🔄 5. Passerelle EDI", "📄 6. IDP OCR Cross-Check", "🌐 7. Innovations Inde & Chine", "📖 8. Code des Douanes", "🔐 Admin & Audit Logs"]
+tabs = st.tabs(tabs_list); tab_dash, tab_manifeste, tab_sad, tab_transit_erp, tab_caisse, tab_edi, tab_ocr, tab_innov, tab_code, tab_admin = tabs
 
 with tab_dash:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True); st.subheader("📈 Performance Globale : Douanes & Agence de Transit")
@@ -339,31 +370,6 @@ with tab_code:
     * **Article 45 :** Modalités de liquidation des droits et taxes exigibles à l'importation.
     * **Article 82 :** Conditions d'octroi du Bon à Enlever (BAE).
     """)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-with tab_ai:
-    st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-    st.subheader("🤖 Module Assistant IA Douanier (Llama 3 via Groq)")
-    prompt_ia = st.text_area("Posez votre question réglementaire ou douanière à l'IA :", value="Quelles sont les conditions d'exonération pour le matériel topographique ?")
-    if st.button("Interroger l'Assistant IA", use_container_width=True):
-        if not groq_api_key:
-            st.error("Veuillez configurer votre clé API Groq.")
-        elif Groq is None:
-            st.error("Le package `groq` n'est pas installé.")
-        else:
-            try:
-                client_groq = Groq(api_key=groq_api_key)
-                response = client_groq.chat.completions.create(
-                    model="llama3-70b-8192",
-                    messages=[
-                        {"role": "system", "content": "Vous êtes un expert supérieur des douanes et du commerce international en Côte d'Ivoire."},
-                        {"role": "user", "content": prompt_ia},
-                    ],
-                )
-                st.markdown("##### 💡 Réponse de l'Expert IA :")
-                st.write(response.choices[0].message.content)
-            except Exception as e:
-                st.error(f"Erreur lors de l'appel à l'API Groq : {e}")
     st.markdown('</div>', unsafe_allow_html=True)
 
 with tab_admin:
