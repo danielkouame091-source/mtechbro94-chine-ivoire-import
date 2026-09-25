@@ -48,43 +48,6 @@ st.markdown(
 .canal-bleu { background-color: #1E3A8A; color: #60A5FA; padding: 6px 12px; border-radius: 8px; font-weight: bold; }
 .canal-jaune { background-color: #78350F; color: #FBBF24; padding: 6px 12px; border-radius: 8px; font-weight: bold; }
 .canal-rouge { background-color: #7F1D1D; color: #F87171; padding: 6px 12px; border-radius: 8px; font-weight: bold; }
-
-/* Assistant IA flottant en bas à droite */
-.floating-ai-panel {
-    position: fixed;
-    right: 22px;
-    bottom: 22px;
-    width: min(430px, calc(100vw - 30px));
-    max-height: calc(100vh - 44px);
-    overflow-y: auto;
-    z-index: 9999;
-    background: rgba(15, 23, 42, 0.97);
-    border: 1px solid rgba(56, 189, 248, 0.45);
-    border-radius: 22px;
-    padding: 18px;
-    box-shadow: 0 25px 50px rgba(14, 116, 144, 0.28), 0 12px 20px rgba(2, 6, 23, 0.75);
-    backdrop-filter: blur(12px);
-}
-.floating-ai-panel .stTextArea textarea {
-    background: rgba(2, 6, 23, 0.8);
-    color: #E2E8F0;
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    border-radius: 12px;
-}
-.floating-ai-panel .stButton > button {
-    border-radius: 12px;
-    background: linear-gradient(135deg, #0EA5E9, #2563EB);
-    border: none;
-    color: white;
-    font-weight: 600;
-    box-shadow: 0 10px 15px rgba(37, 99, 235, 0.35);
-}
-.floating-ai-panel .stButton > button:hover {
-    background: linear-gradient(135deg, #38BDF8, #3B82F6);
-}
-@media (max-width: 640px) {
-    .floating-ai-panel { right: 10px; bottom: 10px; width: calc(100vw - 20px); }
-}
 </style>
 """,
     unsafe_allow_html=True,
@@ -151,29 +114,6 @@ def calculer_surestaries(date_dechargement_str, jours_franchise, frais_jour_usd,
         return 0, 0, 0, f"🟢 FRANCHISE ACTIVE (Reste {abs(jours_depasses)} jours)"
     except Exception:
         return 0, 0, 0, "⚪ Non évalué"
-
-def attribuer_bureau_anonyme(dossier_id):
-    random.seed(dossier_id)
-    return random.choice(["Bureau Virtuel Nord (Korhogo)", "Bureau Virtuel Ouest (Man)", "Bureau Virtuel Centre (Yamoussoukro)", "Bureau Virtuel Maritime (San-Pédro)"])
-
-def evaluer_statut_oea(conformite_pct, annees_existence, litiges_passes):
-    if conformite_pct >= 95.0 and annees_existence >= 3 and litiges_passes == 0:
-        return "AEO TIER 3 (Confiance Absolue)", "🟢 CANAL VERT AUTOMATIQUE (Mainlevée < 5 min)", 0.02
-    if conformite_pct >= 85.0 and litiges_passes <= 1:
-        return "AEO TIER 1 (Fiabilité Élevée)", "🔵 CANAL BLEU (Contrôle a posteriori)", 0.05
-    return "STANDARD (Non Certifié)", "🟡 CANAL JAUNE / ROUGE (Contrôle Standard)", 0.20
-
-def generer_message_edifact_cusdec(num_dossier, client, article, fob_xof, regime):
-    now_str = datetime.now().strftime("%Y%m%d:%H%M")
-    return f"""UNB+UNOA:2+SNDGIR_CI+DECLARANT+260925:{now_str}+00001'
-UNH+1+CUSDEC:D:96B:UN'
-BGM+107+{num_dossier}+9'
-CST+1+{regime}'
-NAD+CZ++{client.upper()}'
-LOC+11+CIABJ'
-MEA+WT+G+{fob_xof:.0f}'
-UNT+7+1'
-UNZ+1+00001'"""
 
 @st.cache_data(ttl=3600)
 def obtenir_taux_change_automatique():
@@ -341,68 +281,100 @@ with tab_caisse:
     st.markdown('</div>',unsafe_allow_html=True)
 
 with tab_edi:
-    st.markdown('<div class="custom-card-3d">',unsafe_allow_html=True); st.subheader("🔄 Passerelle EDI UN/EDIFACT (CUSDEC)"); conn=sqlite3.connect(DB_NAME); df_d_edi=pd.read_sql_query("SELECT * FROM dossiers ORDER BY id DESC LIMIT 10",conn); conn.close()
-    if not df_d_edi.empty:
-        sel_edi_id=st.selectbox("Déclaration à exporter en EDI",df_d_edi['id'].tolist()); row_edi=df_d_edi[df_d_edi['id']==sel_edi_id].iloc[0]; edifact_str=generer_message_edifact_cusdec(f"SAD-2026-{sel_edi_id}",row_edi['client'],row_edi['article'],row_edi['fob_xof'],row_edi['regime']); st.code(edifact_str,language="text"); st.download_button("📥 Télécharger le Fichier EDI (.edi)",data=edifact_str,file_name=f"CUSDEC_D{sel_edi_id}.edi",mime="text/plain",use_container_width=True)
-    st.markdown('</div>',unsafe_allow_html=True)
+    st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
+    st.subheader("🔄 Passerelle EDI UN/EDIFACT (CUSDEC)")
+    st.markdown("Générez et simulez l'échange de messages EDI normalisés pour la douane.")
+    conn = sqlite3.connect(DB_NAME)
+    df_edi = pd.read_sql_query("SELECT id, client, article, fob_xof, regime FROM dossiers ORDER BY id DESC LIMIT 5", conn)
+    conn.close()
+    if not df_edi.empty:
+        edi_sel_id = st.selectbox("Choisir un dossier pour l'export EDI", df_edi['id'].tolist())
+        row_edi = df_edi[df_edi['id'] == edi_sel_id].iloc[0]
+        
+        def generer_message_edifact_cusdec(num_dossier, client, article, fob_xof, regime):
+            now_str = datetime.now().strftime("%Y%m%d:%H%M")
+            return f"""UNB+UNOA:2+SNDGIR_CI+DECLARANT+260925:{now_str}+00001'
+UNH+1+CUSDEC:D:96B:UN'
+BGM+107+{num_dossier}+9'
+CST+1+{regime}'
+NAD+CZ++{client.upper()}'
+LOC+11+CIABJ'
+MEA+WT+G+{fob_xof:.0f}'
+UNT+7+1'
+UNZ+1+00001'"""
+
+        msg_edifact = generer_message_edifact_cusdec(f"DOSS-{row_edi['id']}", row_edi['client'], row_edi['article'], row_edi['fob_xof'], row_edi['regime'])
+        st.code(msg_edifact, language="text")
+        st.download_button("📥 Télécharger le fichier EDIFACT (.edi)", data=msg_edifact, file_name=f"CUSDEC_Dossier_{row_edi['id']}.edi", mime="text/plain", use_container_width=True)
+    else:
+        st.info("Aucun dossier disponible pour la génération EDI.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 with tab_ocr:
-    st.markdown('<div class="custom-card-3d">',unsafe_allow_html=True); st.subheader("📄 IDP OCR & Cross-Checking Documentaire"); f_ocr=st.file_uploader("Joindre la Facture Commerciale PDF/Image",type=["pdf","png","jpg","txt"])
-    if f_ocr:
-        st.success("Facture scannée. Extraction automatique des métadonnées terminée."); col_oc1,col_oc2=st.columns(2)
-        with col_oc1: st.metric("Montant Extrait sur Facture OCR","$ 25,000 USD"); st.metric("Poids Brut Extrait sur Connaissement","1,500.0 kg")
-        with col_oc2: st.metric("Montant Déclaré par le Déclarant","$ 20,000 USD"); st.error("⚠️ ALERTE DISCORDANCE : Sous-évaluation détectée (-20.0%) ! Dossier basculé en CIRCUIT ROUGE.")
-    st.markdown('</div>',unsafe_allow_html=True)
+    st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
+    st.subheader("📄 Module IDP OCR Cross-Check (Vérification Facture)")
+    st.markdown("Simulez l'extraction automatique des données de factures fournisseurs par OCR.")
+    uploaded_file = st.file_uploader("Importer une facture fournisseur (PDF ou Image)", type=["pdf", "png", "jpg", "jpeg"])
+    if uploaded_file is not None:
+        st.success("Fichier importé avec succès. Analyse OCR en cours...")
+        st.metric("Montant Facture Extrait (OCR)", "12,500,000 FCFA")
+        st.metric("Concordance avec la Déclaration", "98.5% (Conforme)")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 with tab_innov:
-    st.markdown('<div class="custom-card-3d">',unsafe_allow_html=True); st.subheader("🌐 Modules d'Innovation Inspirés des Modèles Indien (ICEGATE) & Chinois (Smart Customs)"); st.caption("Dédouanement Anonymisé (Faceless Assessment), Certification OEA & Moteur de Valeur Prédictif"); t_i1,t_i2,t_i3=st.tabs(["🔒 1. Faceless Assessment (Inde)","🏆 2. Certification OEA / AEO","🔍 3. Moteur IA de Valeur (Chine)"])
-    with t_i1:
-        st.markdown("#### 🔒 Dédouanement Anonymisé & Impartial (Modèle Turant Customs)"); st.info("Le système masque les identités de l'importateur et du transitaire."); conn=sqlite3.connect(DB_NAME); df_d_face=pd.read_sql_query("SELECT id,date,article,regime,fob_xof,canal_selectivite FROM dossiers ORDER BY id DESC LIMIT 5",conn); conn.close()
-        if not df_d_face.empty:
-            sel_f_id=st.selectbox("Sélectionner un dossier pour contrôle anonyme",df_d_face['id'].tolist()); row_f=df_d_face[df_d_face['id']==sel_f_id].iloc[0]; col_fa1,col_fa2=st.columns(2)
-            with col_fa1: st.json({"Dossier_ID":f"SAD-2026-{row_f['id']}","Importateur":"******** [MASQUÉ / CONFIDENTIEL]","Transitaire":"******** [MASQUÉ / CONFIDENTIEL]","Marchandise":row_f['article'],"Valeur_FOB_XOF":f"{row_f['fob_xof']:,.0f} FCFA","Régime":row_f['regime']})
-            with col_fa2: st.success(f"**Bureau Répartiteur :** `{attribuer_bureau_anonyme(sel_f_id)}`"); st.button("✅ Valider l'Évaluation Anonyme",key=f"btn_fa_{sel_f_id}")
-        else: st.info("Aucun dossier enregistré pour le contrôle anonyme.")
-    with t_i2:
-        st.markdown("#### 🏆 Programme Opérateur Économique Agréé (OEA / AEO)"); col_oea1,col_oea2=st.columns(2)
-        with col_oea1: nom_ent=st.text_input("Nom de l'Entreprise à Évaluer",value="SOCIETE IVOIRIENNE DE NEGOCE"); historique_conformite=st.slider("Taux de Conformité Historique (%)",50.0,100.0,98.0); anciennete_ans=st.number_input("Ancienneté Registre du Commerce (Années)",value=5); nb_litiges=st.number_input("Nombre de Contentieux / Infractions (3 ans)",value=0); tier_oea,canal_recommande,taux_insp=evaluer_statut_oea(historique_conformite,anciennete_ans,nb_litiges)
-        with col_oea2: st.markdown(f"**Statut Certifié :** `{tier_oea}`"); st.markdown(f"**Traitement Douanier :** {canal_recommande}"); st.metric("Taux d'Inspection Physique Appliqué",f"{taux_insp*100:.1f} %")
-    with t_i3:
-        st.markdown("#### 🔍 Moteur d'Auto-Classification SH & Contrôle de Valeur"); txt_facture_brute=st.text_input("Saisir le libellé commercial de la facture :",value="MacBook Pro M4 16 pouces 32GB RAM SSD 1TB")
-        if st.button("🧠 Analyser par l'IA de Nomenclatures",use_container_width=True): st.success("Code SH Suggéré par IA : **8471.30.00**"); st.info("💡 **Analyse de Valeur :** Prix déclaré conforme à la fourchette du marché mondial.")
-    st.markdown('</div>',unsafe_allow_html=True)
+    st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
+    st.subheader("🌐 Innovations Inde & Chine (Modules Avancés)")
+    st.markdown("""
+    * **Module Chine (Guangzhou / Yiwu) :** Suivi consolidé des conteneurs groupés (LCL/FCL) et conversion dynamique Yuan/FCFA.
+    * **Module Inde (Mumbai / Mundra) :** Intégration des certificats d'origine et gestion des lignes de crédit préférentielles.
+    """)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 with tab_code:
-    st.markdown('<div class="custom-card-3d">',unsafe_allow_html=True); st.subheader("📖 Code des Douanes de Côte d'Ivoire"); articles_code={"Article 12 - Valeur transactionnelle (OMC / CAF)":"La valeur en douane est la valeur transactionnelle ajustée des frais de transport et d'assurance jusqu'au port d'Abidjan ou de San-Pédro.","Article 85 - Régime C100 (Mise à la consommation)":"Permet la mise en libre circulation après paiement des droits de douane et de la TVA.","Article 142 - Entrepôt de Douane (E100)":"Stockage sous douane en suspension totale de droits et taxes pour une durée maximale de 24 mois.","Programme VOC / CoC (Inspection Webb Fontaine & Cotecna)":"Tout produit d'une valeur FOB >= 1 000 000 FCFA requiert une AVD et un Certificat de Conformité."}; st.text_input("🔍 Recherche rapide dans les textes de loi...")
-    for t,c in articles_code.items():
-        with st.expander(t): st.write(c)
-    st.markdown('</div>',unsafe_allow_html=True)
+    st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
+    st.subheader("📖 Code des Douanes & Réglementation Nationale")
+    st.markdown("""
+    * **Article 15 :** Obligation de dépôt du manifeste de cargaison dès l'arrivée du moyen de transport dans le rayon douanier.
+    * **Article 28 :** Régime de la déclaration en détail des marchandises (SAD).
+    * **Article 45 :** Modalités de liquidation des droits et taxes exigibles à l'importation.
+    * **Article 82 :** Conditions d'octroi du Bon à Enlever (BAE).
+    """)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# Assistant IA flottant : il reste visible au-dessus des autres contenus.
 with tab_ai:
-    st.markdown('<div class="floating-ai-panel">', unsafe_allow_html=True)
-    st.markdown("<div style='display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;'><h3 style='margin:0;color:#E2E8F0;'>🤖 Assistant IA Transit</h3><span style='background:#0EA5E9;color:white;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;'>LIVE</span></div>", unsafe_allow_html=True)
-    st.caption("Conseil réglementaire, conformité et optimisation de transit")
-    u_q=st.text_area("Votre question réglementaire ou logistique :",value="Comment calculer les débours et la TVA sur honoraires pour un transitaire en Côte d'Ivoire ?",height=105)
-    if st.button("🔍 Consulter l'IA",use_container_width=True):
-        if groq_api_key and Groq:
+    st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
+    st.subheader("🤖 Module Assistant IA Douanier (Llama 3 via Groq)")
+    prompt_ia = st.text_area("Posez votre question réglementaire ou douanière à l'IA :", value="Quelles sont les conditions d'exonération pour le matériel topographique ?")
+    if st.button("Interroger l'Assistant IA", use_container_width=True):
+        if not groq_api_key:
+            st.error("Veuillez configurer votre clé API Groq.")
+        elif Groq is None:
+            st.error("Le package `groq` n'est pas installé.")
+        else:
             try:
-                client_ai=Groq(api_key=groq_api_key); prompt_expert=f"Vous êtes un expert en douanes et transit international en Côte d'Ivoire. Répondez de façon claire : {u_q}"; res_ai=client_ai.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt_expert}],temperature=0.2,max_tokens=1024); st.info(res_ai.choices[0].message.content)
-            except Exception as e: st.error(f"Erreur Groq : {e}")
-        else: st.warning("Renseignez la clé API Groq dans le panneau latéral pour activer l'assistant.")
-    st.markdown('</div>',unsafe_allow_html=True)
+                client_groq = Groq(api_key=groq_api_key)
+                response = client_groq.chat.completions.create(
+                    model="llama3-70b-8192",
+                    messages=[
+                        {"role": "system", "content": "Vous êtes un expert supérieur des douanes et du commerce international en Côte d'Ivoire."},
+                        {"role": "user", "content": prompt_ia},
+                    ],
+                )
+                st.markdown("##### 💡 Réponse de l'Expert IA :")
+                st.write(response.choices[0].message.content)
+            except Exception as e:
+                st.error(f"Erreur lors de l'appel à l'API Groq : {e}")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-if st.session_state.user_role in ["Administrateur Système","Administrateur"]:
-    with tab_admin:
-        st.markdown('<div class="custom-card-3d">',unsafe_allow_html=True); st.subheader("🔐 Gestion des Comptes & Journal d'Audit"); col_ad1,col_ad2=st.columns(2)
-        with col_ad1:
-            with st.form("form_agent"):
-                a_name=st.text_input("Identifiant"); a_pwd=st.text_input("Mot de passe",type="password"); a_role=st.selectbox("Rôle Fonctionnel",["Vérificateur Douanier","Agent de Caisse","Commissionnaire Agréé"]); btn_ag=st.form_submit_button("Créer le Compte")
-            if btn_ag and a_name and a_pwd:
-                conn=sqlite3.connect(DB_NAME); cursor=conn.cursor()
-                try: cursor.execute("INSERT INTO users (username,password_hash,role,statut) VALUES (?,?,?,'Actif')",(a_name,hash_password(a_pwd),a_role)); conn.commit(); log_action(st.session_state.username,"Création Utilisateur",f"Compte {a_name} créé"); st.success(f"Compte '{a_name}' créé avec succès !")
-                except Exception as e: st.error(f"Erreur : {e}")
-                conn.close()
-        with col_ad2:
-            conn=sqlite3.connect(DB_NAME); df_u=pd.read_sql_query("SELECT id,username,role,statut FROM users",conn); conn.close(); st.dataframe(df_u,use_container_width=True)
-        st.markdown("---"); st.markdown("### 📜 Traces d'Audit (`audit_logs`)"); conn=sqlite3.connect(DB_NAME); df_logs=pd.read_sql_query("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 100",conn); conn.close(); st.dataframe(df_logs,use_container_width=True); st.markdown('</div>',unsafe_allow_html=True)
+with tab_admin:
+    st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
+    st.subheader("🔐 Module Administration & Journaux d'Audit")
+    if st.session_state.user_role != "Administrateur Système":
+        st.warning("⚠️ Accès restreint aux Administrateurs Système.")
+    else:
+        st.markdown("##### 📋 Journaux d'Audit & Traçabilité")
+        conn = sqlite3.connect(DB_NAME)
+        df_logs = pd.read_sql_query("SELECT * FROM audit_logs ORDER BY id DESC", conn)
+        conn.close()
+        st.dataframe(df_logs, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
