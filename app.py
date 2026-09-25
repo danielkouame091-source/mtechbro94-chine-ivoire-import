@@ -176,12 +176,26 @@ def generer_facture_transit_pdf(dossier_id, client, article, total_douane, honor
     styles = getSampleStyleSheet(); elements = []
     title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#0284C7'), alignment=1)
     elements += [Paragraph("<b>AGENCE DE TRANSIT & LOGISTIQUE</b>", title_style), Spacer(1, 15)]
-    tva_hon = honoraires * 0.18; total_ general = total_douane + honoraires + tva_hon + frais_port + frais_transport + surestaries
-    data = [["Rubrique", "Montant (FCFA)"], ["Droits & Taxes", f"{total_douane:,.0f} FCFA"], ["Frais Portuaires", f"{frais_port:,.0f} FCFA"], ["Transport", f"{frais_transport:,.0f} FCFA"], ["Surestaries", f"{surestaries:,.0f} FCFA"], ["Honoraires", f"{honoraires:,.0f} FCFA"], ["TVA Honoraires (18%)", f"{tva_hon:,.0f} FCFA"], ["TOTAL", f"{total_ general:,.0f} FCFA"]]
+    
+    tva_hon = honoraires * 0.18
+    total_general = total_douane + honoraires + tva_hon + frais_port + frais_transport + surestaries
+    
+    data = [
+        ["Rubrique", "Montant (FCFA)"], 
+        ["Droits & Taxes", f"{total_douane:,.0f} FCFA"], 
+        ["Frais Portuaires", f"{frais_port:,.0f} FCFA"], 
+        ["Transport", f"{frais_transport:,.0f} FCFA"], 
+        ["Surestaries", f"{surestaries:,.0f} FCFA"], 
+        ["Honoraires", f"{honoraires:,.0f} FCFA"], 
+        ["TVA Honoraires (18%)", f"{tva_hon:,.0f} FCFA"], 
+        ["TOTAL", f"{total_general:,.0f} FCFA"]
+    ]
+    
     t = Table(data, colWidths=[300, 200])
     t.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#0F172A')),('TEXTCOLOR',(0,0),(-1,0),colors.white),('GRID',(0,0),(-1,-1),0.5,colors.grey)]))
     elements += [Paragraph(f"<b>Client :</b> {client}<br/>", styles['Normal']), t]
-    doc.build(elements); return pdf_filename
+    doc.build(elements)
+    return pdf_filename
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
