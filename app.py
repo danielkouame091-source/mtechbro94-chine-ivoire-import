@@ -18,7 +18,7 @@ import plotly.graph_objects as go
 import requests
 import streamlit as st
 
-# ReportLab pour la génération de documents PDF nationaux
+# ReportLab pour la génération de documents PDF nationaux & Transit
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -30,10 +30,10 @@ except ImportError:
     Groq = None
 
 # =========================================================
-# CONFIGURATION ET STYLE NATIONAL GOVTECH 3D
+# CONFIGURATION ET STYLE NATIONAL GOVTECH & TRANSIT ERP
 # =========================================================
 st.set_page_config(
-    page_title="SNDGIR - Système National Douanier",
+    page_title="SNDGIR - Transit & Douanes Côte d'Ivoire",
     page_icon="🇨🇮",
     layout="wide",
 )
@@ -84,7 +84,7 @@ st.markdown(
 )
 
 # =========================================================
-# BASE DE DONNÉES SQLITE - ARCHITECTURE DOUBLE FLUX
+# BASE DE DONNÉES SQLITE - ARCHITECTURE DOUANES & TRANSIT
 # =========================================================
 DB_NAME = "sndgir_national_customs.db"
 UPLOAD_DIR = "uploads_dossiers"
@@ -145,7 +145,7 @@ def init_db():
         )
     """)
 
-    # Table Déclarations en Détail (SAD)
+    # Table Déclarations & Dossiers de Transit
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS dossiers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -164,7 +164,12 @@ def init_db():
             canal_selectivite TEXT,
             motifs_risque TEXT,
             quittance_num TEXT,
-            document_path TEXT
+            document_path TEXT,
+            honoraires REAL DEFAULT 150000,
+            frais_port REAL DEFAULT 85000,
+            frais_transport REAL DEFAULT 120000,
+            surestaries_xof REAL DEFAULT 0,
+            statut_livraison TEXT DEFAULT 'Sous douane'
         )
     """)
 
@@ -217,13 +222,12 @@ def log_action(username, action, details):
     conn.close()
 
 # =========================================================
-# MOTEUR DE SÉLECTIVITÉ HYBRIDE & ANLYSE DES RISQUES
+# FONCTIONS MÉTIER : RISQUE, SURESTARIES & PRIX
 # =========================================================
 def calculer_selectivite_risque(fob_xof, item_info, diff_ocr_pct, client_nom):
     score = 10.0
     motifs = []
 
-    # Règle 1 : Valeur élevée
     if fob_xof > 50000000:
         score += 30
         motifs.append("Valeur FOB supérieure à 50M FCFA")
@@ -231,7 +235,6 @@ def calculer_selectivite_risque(fob_xof, item_info, diff_ocr_pct, client_nom):
         score += 15
         motifs.append("Valeur FOB supérieure à 10M FCFA")
 
-    # Règle 2 : Divergence OCR Facture vs Déclaration
     if diff_ocr_pct > 15.0:
         score += 40
         motifs.append(f"Divergence majeure OCR Facture ({diff_ocr_pct:.1f}%)")
@@ -239,12 +242,10 @@ def calculer_selectivite_risque(fob_xof, item_info, diff_ocr_pct, client_nom):
         score += 20
         motifs.append(f"Écart mineur OCR Facture ({diff_ocr_pct:.1f}%)")
 
-    # Règle 3 : Catégories sensibles
-    if item_info['cat'] in ['High-Tech', 'Véhicules']:
+    if item_info.get('cat') in ['High-Tech', 'Véhicules']:
         score += 15
-        motifs.append(f"Catégorie sous surveillance ({item_info['cat']})")
+        motifs.append(f"Catégorie sous surveillance ({item_info.get('cat')})")
 
-    # Détermination du Canal
     if score < 25:
         canal = "VERT"
     elif score < 45:
@@ -256,9 +257,22 @@ def calculer_selectivite_risque(fob_xof, item_info, diff_ocr_pct, client_nom):
 
     return round(score, 1), canal, " | ".join(motifs) if motifs else "Déclaration conforme"
 
-# =========================================================
-# GENERATEUR EDI UN/EDIFACT (CUSDEC / CUSRES)
-# =========================================================
+def calculer_surestaries(date_dechargement_str, jours_franchise, frais_jour_usd, taux_usd):
+    try:
+        date_arr = datetime.strptime(date_dechargement_str, "%Y-%m-%d")
+        date_limite = date_arr + timedelta(days=int(jours_franchise))
+        aujourdhui = datetime.now()
+        jours_depasses = (aujourdhui - date_limite).days
+        if jours_depasses > 0:
+            cout_usd = jours_depasses * frais_jour_usd
+            cout_xof = cout_usd * taux_usd
+            return jours_depasses, cout_usd, cout_xof, f"🔴 PÉNALITÉ DE SURESTARIES ({jours_depasses} j. de dépassement)"
+        else:
+            reste = abs(jours_depasses)
+            return 0, 0, 0, f"🟢 FRANCHISE ACTIVE (Reste {reste} jours)"
+    except Exception:
+        return 0, 0, 0, "⚪ Non évalué"
+
 def generer_message_edifact_cusdec(num_dossier, client, article, fob_xof, regime):
     now_str = datetime.now().strftime("%Y%m%d:%H%M")
     edifact = f"""UNB+UNOA:2+SNDGIR_CI+DECLARANT+260925:{now_str}+00001'
@@ -272,9 +286,6 @@ UNT+7+1'
 UNZ+1+00001'"""
     return edifact
 
-# =========================================================
-# CALCULATEUR DROITS ET TAXES
-# =========================================================
 @st.cache_data(ttl=3600)
 def obtenir_taux_change_automatique():
     default_rates = {"CNY": 85.0, "USD": 610.0, "EUR": 655.957, "AED": 166.0}
@@ -313,50 +324,7 @@ def calculer_droits_douane(caf_xof, dd_pct, regime_code):
     return total_douane
 
 # =========================================================
-# AUTHENTIFICATION & SESSIONS
-# =========================================================
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-    st.session_state.user_role = ""
-    st.session_state.username = ""
-
-if not st.session_state.authenticated:
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-        st.subheader("🔐 Portail National Douanier (SNDGIR)")
-        st.caption("Système National de Dédouanement et de Gestion Intelligente des Risques")
-
-        username_input = st.text_input("Identifiant Officiel")
-        password_input = st.text_input("Mot de passe", type="password")
-
-        if st.button("Se connecter au Système", use_container_width=True):
-            conn = sqlite3.connect(DB_NAME)
-            cursor = conn.cursor()
-            cursor.execute("SELECT username, password_hash, role, statut FROM users WHERE username = ?", (username_input,))
-            row = cursor.fetchone()
-            conn.close()
-
-            if row:
-                u_name, u_pwd_hash, u_role, u_statut = row
-                if u_statut != "Actif":
-                    st.error("Compte désactivé.")
-                elif hash_password(password_input) == u_pwd_hash:
-                    st.session_state.authenticated = True
-                    st.session_state.username = u_name
-                    st.session_state.user_role = u_role
-                    log_action(u_name, "Connexion", "Accès accordé au portail")
-                    st.rerun()
-                else:
-                    st.error("Mot de passe incorrect.")
-            else:
-                st.error("Identifiant non reconnu. (Ex: admin / transit2026)")
-        st.markdown('</div>', unsafe_allow_html=True)
-        st.stop()
-
-# =========================================================
-# GENERATION DE BON A ENLEVER (BAE) ET QUITTANCE PDF
+# GENERATION DE DOCUMENTS PDF (BAE & FACTURE TRANSIT)
 # =========================================================
 def generer_bae_pdf(dossier_id, client, article, bl_num, container_num, quittance_num, total_facture):
     pdf_filename = f"BAE_Officiel_SNDGIR_{dossier_id}.pdf"
@@ -389,11 +357,97 @@ def generer_bae_pdf(dossier_id, client, article, bl_num, container_num, quittanc
     doc.build(elements)
     return pdf_filename
 
+def generer_facture_transit_pdf(dossier_id, client, article, total_douane, honoraires, frais_port, frais_transport, surestaries):
+    pdf_filename = f"Facture_Transit_{dossier_id}_{client.replace(' ', '_')}.pdf"
+    doc = SimpleDocTemplate(pdf_filename, pagesize=letter, rightMargin=35, leftMargin=35, topMargin=35, bottomMargin=35)
+    elements = []
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#0284C7'), alignment=1)
+    
+    elements.append(Paragraph("<b>AGENCE DE TRANSIT & LOGISTIQUE INTERNATIONALE</b>", title_style))
+    elements.append(Paragraph("<font size=10>Facture Définitive de Dédouanement et Prestations</font>", title_style))
+    elements.append(Spacer(1, 15))
+
+    tva_hon = honoraires * 0.18
+    total_general = total_douane + honoraires + tva_hon + frais_port + frais_transport + surestaries
+
+    data = [
+        ["Rubrique / Prestation", "Montant (FCFA)"],
+        ["Droits & Taxes de Douane (Débours)", f"{total_douane:,.0f} FCFA"],
+        ["Frais de Passage Portuaire & Acconage (Débours)", f"{frais_port:,.0f} FCFA"],
+        ["Frais de Transport Terrestre / Livraison", f"{frais_transport:,.0f} FCFA"],
+        ["Pénalités de Surestaries / Immobilisation", f"{surestaries:,.0f} FCFA"],
+        ["Honoraires & Commission de Transit", f"{honoraires:,.0f} FCFA"],
+        ["TVA sur Honoraires (18%)", f"{tva_hon:,.0f} FCFA"],
+        ["TOTAL GÉNÉRAL À PAYER", f"{total_general:,.0f} FCFA"]
+    ]
+
+    t = Table(data, colWidths=[300, 200])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0F172A')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0,0), (-1,0), 8),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+        ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+        ('TEXTCOLOR', (0,-1), (-1,-1), colors.HexColor('#0284C7'))
+    ]))
+
+    elements.append(Paragraph(f"<b>Facture N° :</b> FAC-2026-{dossier_id:05d}<br/><b>Client :</b> {client}<br/><b>Marchandise :</b> {article}<br/><br/>", styles['Normal']))
+    elements.append(t)
+    doc.build(elements)
+    return pdf_filename
+
+# =========================================================
+# AUTHENTIFICATION & SESSIONS
+# =========================================================
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+    st.session_state.user_role = ""
+    st.session_state.username = ""
+
+if not st.session_state.authenticated:
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
+        st.subheader("🔐 Portail National Douanier & Transit (SNDGIR)")
+        st.caption("Système National de Dédouanement et Gestion Intégrée du Transit")
+
+        username_input = st.text_input("Identifiant Officiel")
+        password_input = st.text_input("Mot de passe", type="password")
+
+        if st.button("Se connecter au Système", use_container_width=True):
+            conn = sqlite3.connect(DB_NAME)
+            cursor = conn.cursor()
+            cursor.execute("SELECT username, password_hash, role, statut FROM users WHERE username = ?", (username_input,))
+            row = cursor.fetchone()
+            conn.close()
+
+            if row:
+                u_name, u_pwd_hash, u_role, u_statut = row
+                if u_statut != "Actif":
+                    st.error("Compte désactivé.")
+                elif hash_password(password_input) == u_pwd_hash:
+                    st.session_state.authenticated = True
+                    st.session_state.username = u_name
+                    st.session_state.user_role = u_role
+                    log_action(u_name, "Connexion", "Accès accordé au portail")
+                    st.rerun()
+                else:
+                    st.error("Mot de passe incorrect.")
+            else:
+                st.error("Identifiant non reconnu. (Ex: admin / transit2026 ou declarant / compta2026)")
+        st.markdown('</div>', unsafe_allow_html=True)
+        st.stop()
+
 # =========================================================
 # BARRE LATÉRALE DE NAVIGATION
 # =========================================================
-st.sidebar.title("🇨🇮 SNDGIR NATIONAL")
-st.sidebar.markdown(f"**Agent :** `{st.session_state.username}`")
+st.sidebar.title("🇨🇮 SNDGIR & TRANSIT ERP")
+st.sidebar.markdown(f"**Utilisateur :** `{st.session_state.username}`")
 st.sidebar.markdown(f"**Rôle :** `{st.session_state.user_role}`")
 st.sidebar.markdown("---")
 
@@ -412,24 +466,25 @@ if st.sidebar.button("🚪 Déconnexion", use_container_width=True):
     st.rerun()
 
 # =========================================================
-# EN-TÊTE ET ONGLETS DU SYSTÈME DOUANIER
+# EN-TÊTE ET ONGLETS
 # =========================================================
 st.markdown("""
 <div class="header-banner">
-    <h1>🏛️ CÔTE D'IVOIRE : SYSTÈME NATIONAL DE DÉDOUANEMENT (SNDGIR v5.0)</h1>
-    <p>Module Intégré : Manifeste, Sélectivité Hybride (Vert/Bleu/Jaune/Rouge), Caisse, EDI & AI Risk Management</p>
+    <h1>🏛️ CÔTE D'IVOIRE : SYSTÈME DÉDOUANEMENT & TRANSIT ERP (v5.0)</h1>
+    <p>Module Intégré : Cargo, Sélectivité Douanière, Facturation Client, Surestaries, EDI & IA Risk Management</p>
 </div>
 """, unsafe_allow_html=True)
 
 tabs_list = [
-    "📈 Dashboard National",
+    "📈 Dashboard & Marges",
     "🚢 1. Manifeste & Fret",
-    "📋 2. Déclaration en Détail & Sélectivité",
-    "💳 3. Caisse & BAE",
-    "🔄 4. Passerelle EDI",
-    "📄 5. IDP OCR Cross-Check",
-    "📖 6. Code des Douanes",
-    "🤖 7. Assistant IA Douanes",
+    "📋 2. Déclaration en Détail (SAD)",
+    "💼 3. Transit ERP & Facturation",
+    "💳 4. Caisse & BAE",
+    "🔄 5. Passerelle EDI",
+    "📄 6. IDP OCR Cross-Check",
+    "📖 7. Code des Douanes",
+    "🤖 8. Assistant IA Transit",
     "🔐 Admin & Audit Logs"
 ]
 
@@ -437,26 +492,27 @@ tabs = st.tabs(tabs_list)
 tab_dash = tabs[0]
 tab_manifeste = tabs[1]
 tab_sad = tabs[2]
-tab_caisse = tabs[3]
-tab_edi = tabs[4]
-tab_ocr = tabs[5]
-tab_code = tabs[6]
-tab_ai = tabs[7]
-tab_admin = tabs[8]
+tab_transit_erp = tabs[3]
+tab_caisse = tabs[4]
+tab_edi = tabs[5]
+tab_ocr = tabs[6]
+tab_code = tabs[7]
+tab_ai = tabs[8]
+tab_admin = tabs[9]
 
 # =========================================================
-# TAB 0 : DASHBOARD NATIONAL DE PERFORMANCE
+# TAB 0 : DASHBOARD NATIONAL & MARGES TRANSIT
 # =========================================================
 with tab_dash:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-    st.subheader("📈 Indicateurs Nationaux de Liquidation & Risques Douaniers")
+    st.subheader("📈 Performance Globale : Douanes & Agence de Transit")
 
     conn = sqlite3.connect(DB_NAME)
     df_d = pd.read_sql_query("SELECT * FROM dossiers", conn)
     conn.close()
 
     if df_d.empty:
-        st.info("Aucune déclaration enregistrée dans le système national.")
+        st.info("Aucun dossier enregistré dans le système.")
     else:
         tot_droits = df_d['total_facture'].sum()
         nb_decl = len(df_d)
@@ -464,8 +520,8 @@ with tab_dash:
         nb_vert = len(df_d[df_d['canal_selectivite'] == 'VERT'])
 
         k1, k2, k3, k4 = st.columns(4)
-        with k1: st.markdown(f"""<div class="kpi-card"><div class="kpi-title">Recettes Liquidées</div><div class="kpi-value">{tot_droits:,.0f} FCFA</div></div>""", unsafe_allow_html=True)
-        with k2: st.markdown(f"""<div class="kpi-card"><div class="kpi-title">Total Déclarations</div><div class="kpi-value">{nb_decl}</div></div>""", unsafe_allow_html=True)
+        with k1: st.markdown(f"""<div class="kpi-card"><div class="kpi-title">Droits Douane Liquidés</div><div class="kpi-value">{tot_droits:,.0f} FCFA</div></div>""", unsafe_allow_html=True)
+        with k2: st.markdown(f"""<div class="kpi-card"><div class="kpi-title">Dossiers Traités</div><div class="kpi-value">{nb_decl}</div></div>""", unsafe_allow_html=True)
         with k3: st.markdown(f"""<div class="kpi-card"><div class="kpi-title">Circuits Verts (Mainlevée)</div><div class="kpi-value" style="color:#34D399;">{nb_vert}</div></div>""", unsafe_allow_html=True)
         with k4: st.markdown(f"""<div class="kpi-card"><div class="kpi-title">Circuits Rouges (Inspections)</div><div class="kpi-value" style="color:#F87171;">{nb_rouge}</div></div>""", unsafe_allow_html=True)
 
@@ -478,18 +534,18 @@ with tab_dash:
             st.plotly_chart(fig_canal, use_container_width=True)
 
         with col_g2:
-            fig_regime = px.bar(df_d, x='regime', y='total_facture', color='canal_selectivite', title="Recettes par Régime Douanier")
+            fig_regime = px.bar(df_d, x='regime', y='total_facture', color='canal_selectivite', title="Recettes Douanières par Régime")
             fig_regime.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color='white')
             st.plotly_chart(fig_regime, use_container_width=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 1 : MODULE MANIFESTE & CARGO TRACKING
+# TAB 1 : MANIFESTE & FRET
 # =========================================================
 with tab_manifeste:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-    st.subheader("🚢 Module 1 : Gestion des Manifestes de Cargo (Air / Mer)")
+    st.subheader("🚢 Module Cargo : Manifestes Maritimes & Aériens")
 
     col_m1, col_m2 = st.columns([1, 1])
 
@@ -511,13 +567,13 @@ with tab_manifeste:
                                (m_num, m_transport, m_voyage, m_prov, m_date.strftime("%Y-%m-%d")))
                 conn.commit()
                 log_action(st.session_state.username, "Ajout Manifeste", f"Manifeste {m_num} créé")
-                st.success(f"Manifeste {m_num} créé !")
+                st.success(f"Manifeste {m_num} enregistré avec succès !")
             except Exception as e:
                 st.error(f"Erreur : {e}")
             conn.close()
 
     with col_m2:
-        st.markdown("##### 2️⃣ Ajouter une Ligne de Fret (Connaissement B/L)")
+        st.markdown("##### 2️⃣ Ajouter un Connaissement / B/L")
         conn = sqlite3.connect(DB_NAME)
         df_man = pd.read_sql_query("SELECT num_manifeste FROM manifestes", conn)
         conn.close()
@@ -529,7 +585,7 @@ with tab_manifeste:
                 f_client = st.text_input("Destinataire (Consignee)", value="ETS KOUASSI & FRERES")
                 f_poids = st.number_input("Poids Brut (kg)", value=1500.0)
                 f_colis = st.number_input("Nombre de Colis", value=45)
-                btn_f = st.form_submit_button("Ajouter la Ligne de Fret")
+                btn_f = st.form_submit_button("Rattacher le Connaissement")
 
             if btn_f and f_bl:
                 conn = sqlite3.connect(DB_NAME)
@@ -544,7 +600,7 @@ with tab_manifeste:
                 conn.close()
 
     st.markdown("---")
-    st.markdown("### Registre National des Manifestes et Apurement Fret")
+    st.markdown("### Registre des Connaissements & Apurement Cargo")
     conn = sqlite3.connect(DB_NAME)
     df_fret_all = pd.read_sql_query("SELECT * FROM fret_lines", conn)
     conn.close()
@@ -553,11 +609,11 @@ with tab_manifeste:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 2 : DÉCLARATION EN DÉTAIL & SÉLECTIVITÉ HYBRIDE
+# TAB 2 : DÉCLARATION EN DÉTAIL (SAD)
 # =========================================================
 with tab_sad:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-    st.subheader("📋 Module 2 : Déclaration en Détail (SAD) & Moteur de Sélectivité")
+    st.subheader("📋 Module Douane : Saisie du SAD & Sélectivité")
 
     conn = sqlite3.connect(DB_NAME)
     df_art_db = pd.read_sql_query("SELECT * FROM articles", conn)
@@ -597,7 +653,7 @@ with tab_sad:
         total_douane = calculer_droits_douane(caf_xof, item_row['dd'], regime_code)
 
     with col_s2:
-        st.markdown("##### 🎯 Anlayse du Risque & Sélectivité")
+        st.markdown("##### 🎯 Analyse du Risque & Sélectivité")
         diff_ocr_simulee = st.slider("Divergence OCR Facture vs Déclaration (%)", 0.0, 30.0, 2.0)
 
         score_risk, canal, motifs_risk = calculer_selectivite_risque(fob_xof, {"cat": item_row['categorie']}, diff_ocr_simulee, client_decl)
@@ -624,22 +680,98 @@ with tab_sad:
         """, (date_str, client_decl, article_nom, regime_code, fob_xof, total_douane, total_douane, "En cours de contrôle" if canal in ["JAUNE", "ROUGE"] else "Liquidé - En attente de paiement",
               bl_select, container_input, datetime.now().strftime("%Y-%m-%d"), score_risk, canal, motifs_risk))
 
-        # Apurement du Fret
         cursor.execute("UPDATE fret_lines SET statut_apurement = 'Apuré par SAD' WHERE bl_number = ?", (bl_select,))
         conn.commit()
         conn.close()
 
         log_action(st.session_state.username, "Soumission SAD", f"SAD enregistrée pour {client_decl} - Canal {canal}")
-        st.success(f"Déclaration enregistrée avec succès sous le Canal **{canal}** !")
+        st.success(f"Déclaration enregistrée sous le Canal **{canal}** !")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 3 : CAISSE & BON À ENLEVER (BAE) SÉCURISÉ
+# TAB 3 : TRANSIT ERP & FACTURATION CLIENT
+# =========================================================
+with tab_transit_erp:
+    st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
+    st.subheader("💼 Module Transitaire : Facturation, Débours & Surestaries")
+
+    conn = sqlite3.connect(DB_NAME)
+    df_dos_t = pd.read_sql_query("SELECT * FROM dossiers ORDER BY id DESC", conn)
+    conn.close()
+
+    if df_dos_t.empty:
+        st.info("Aucun dossier disponible pour la facturation transit.")
+    else:
+        sel_dos_id = st.selectbox("Sélectionner un Dossier de Transit à Facturer", df_dos_t['id'].tolist())
+        row_t = df_dos_t[df_dos_t['id'] == sel_dos_id].iloc[0]
+
+        st.markdown(f"### 📑 Dossier N° RCI-DOUANE-2026-{row_t['id']} | Client : **{row_t['client']}**")
+
+        col_tr1, col_tr2 = st.columns(2)
+
+        with col_tr1:
+            st.markdown("##### ⏱️ Suivi de la Franchise & Surestaries")
+            d_dechargement = st.date_input("Date de Déchargement du Conteneur", value=datetime.now() - timedelta(days=6))
+            franchise_j = st.number_input("Jours de Franchise Accordés par l'Armateur", value=7, min_value=1)
+            penalite_usd = st.number_input("Pénalité Jour Supplémentaire ($ USD)", value=50.0)
+
+            j_dep, c_usd, c_xof, statut_sure = calculer_surestaries(
+                d_dechargement.strftime("%Y-%m-%d"),
+                franchise_j,
+                penalite_usd,
+                taux_usd_xof
+            )
+
+            st.info(f"**Statut Surestaries :** {statut_sure}")
+            if j_dep > 0:
+                st.error(f"Pénalité calculée : **${c_usd:,.2f} USD** ({c_xof:,.0f} FCFA)")
+
+            st.markdown("---")
+            st.markdown("##### 📋 Checklist Documentaire Dossier Transit")
+            chk_fact = st.checkbox("Facture Commerciale Originale", value=True)
+            chk_bl = st.checkbox("Connaissement / B/L Original", value=True)
+            chk_avd = st.checkbox("Attestation de Vérification (AVD / Webb Fontaine)", value=True)
+            chk_bsc = st.checkbox("Bordereau de Suivi de Cargaison (BSC / OIC)", value=False)
+
+        with col_tr2:
+            st.markdown("##### 💰 Éléments de Facturation Transitaire")
+            d_douane = row_t['total_facture']
+            f_port = st.number_input("Frais de Passage Portuaire & Acconage (FCFA)", value=row_t['frais_port'])
+            f_transport = st.number_input("Frais de Transport Terrestre / Camionnage (FCFA)", value=row_t['frais_transport'])
+            f_honoraires = st.number_input("Honoraires / Commission de Transit (FCFA)", value=row_t['honoraires'])
+
+            tva_honoraires = f_honoraires * 0.18
+            total_facture_globale = d_douane + f_port + f_transport + c_xof + f_honoraires + tva_honoraires
+
+            st.markdown("---")
+            st.markdown(f"#### **TOTAL FACTURE TRANSIT :** `{total_facture_globale:,.0f} FCFA`")
+            st.caption(f"Inclut : Droits Douane ({d_douane:,.0f} FCFA) + Débours Portuaires + Honoraires Transit + Surestaries")
+
+            if st.button("📄 Mettre à Jour & Générer la Facture Client (PDF)", use_container_width=True):
+                conn = sqlite3.connect(DB_NAME)
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE dossiers 
+                    SET honoraires = ?, frais_port = ?, frais_transport = ?, surestaries_xof = ?
+                    WHERE id = ?
+                """, (f_honoraires, f_port, f_transport, c_xof, sel_dos_id))
+                conn.commit()
+                conn.close()
+
+                pdf_fac = generer_facture_transit_pdf(sel_dos_id, row_t['client'], row_t['article'], d_douane, f_honoraires, f_port, f_transport, c_xof)
+
+                with open(pdf_fac, "rb") as f_pdf:
+                    st.download_button("📥 Télécharger la Facture Définitive Transitaire (PDF)", data=f_pdf.read(), file_name=pdf_fac, mime="application/pdf", use_container_width=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# =========================================================
+# TAB 4 : CAISSE & BAE
 # =========================================================
 with tab_caisse:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-    st.subheader("💳 Module 3 : Caisse Douanière & Émission du Bon à Enlever (BAE)")
+    st.subheader("💳 Module Caisse & Bon à Enlever (BAE) Sécurisé")
 
     conn = sqlite3.connect(DB_NAME)
     df_dossiers_all = pd.read_sql_query("SELECT * FROM dossiers ORDER BY id DESC", conn)
@@ -651,11 +783,11 @@ with tab_caisse:
         st.dataframe(df_dossiers_all[['id', 'date', 'client', 'article', 'canal_selectivite', 'total_facture', 'solde_du', 'statut']], use_container_width=True)
 
         st.markdown("---")
-        st.subheader("⚙️ Encaisser la Liquidation & Délivrer la Mainlevée (BAE)")
+        st.subheader("⚙️ Encaisser la Liquidation & Délivrer le BAE")
 
         col_pay1, col_pay2 = st.columns(2)
         with col_pay1:
-            sel_dossier_id = st.selectbox("Sélectionner l'ID de Déclaration à Encaisser", df_dossiers_all['id'].tolist())
+            sel_dossier_id = st.selectbox("Sélectionner l'ID du Dossier à Encaisser", df_dossiers_all['id'].tolist())
             row_pay = df_dossiers_all[df_dossiers_all['id'] == sel_dossier_id].iloc[0]
 
             st.write(f"**Client :** {row_pay['client']} | **Montant à Régler :** `{row_pay['solde_du']:,.0f} FCFA`")
@@ -674,7 +806,6 @@ with tab_caisse:
                 log_action(st.session_state.username, "Paiement Caisse", f"Quittance {quittance} générée pour dossier #{sel_dossier_id}")
                 st.success(f"Paiement enregistré ! Quittance N° **{quittance}** émise.")
 
-                # Génération du BAE PDF
                 pdf_bae = generer_bae_pdf(sel_dossier_id, row_pay['client'], row_pay['article'], row_pay['bl_number'], row_pay['container_number'], quittance, row_pay['total_facture'])
 
                 with open(pdf_bae, "rb") as f_bae:
@@ -683,44 +814,48 @@ with tab_caisse:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 4 : PASSERELLE EDI (UN/EDIFACT)
+# TAB 5 : PASSERELLE EDI
 # =========================================================
 with tab_edi:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-    st.subheader("🔄 Module 4 : Passerelle EDI & Interopérabilité UN/EDIFACT")
-    st.caption("Génération et conversion automatique des messages normalisés OMD/UN (CUSDEC / CUSRES)")
+    st.subheader("🔄 Passerelle EDI UN/EDIFACT (CUSDEC)")
 
     conn = sqlite3.connect(DB_NAME)
-    df_d_edi = pd.read_sql_query("SELECT * FROM dossiers ORDER BY id DESC LIMIT 5", conn)
+    df_d_edi = pd.read_sql_query("SELECT * FROM dossiers ORDER BY id DESC LIMIT 10", conn)
     conn.close()
 
     if not df_d_edi.empty:
-        sel_edi_id = st.selectbox("Sélectionner une Déclaration à exporter en EDI", df_d_edi['id'].tolist())
+        sel_edi_id = st.selectbox("Déclaration à exporter en EDI", df_d_edi['id'].tolist())
         row_edi = df_d_edi[df_d_edi['id'] == sel_edi_id].iloc[0]
 
         edifact_str = generer_message_edifact_cusdec(f"SAD-2026-{sel_edi_id}", row_edi['client'], row_edi['article'], row_edi['fob_xof'], row_edi['regime'])
 
         st.code(edifact_str, language="text")
 
-        st.download_button("📥 Télécharger le Fichier EDI (UN/EDIFACT .edi)", data=edifact_str, file_name=f"CUSDEC_D{sel_edi_id}.edi", mime="text/plain", use_container_width=True)
+        st.download_button(
+            "📥 Télécharger le Fichier EDI (.edi)",
+            data=edifact_str,
+            file_name=f"CUSDEC_D{sel_edi_id}.edi",
+            mime="text/plain",
+            use_container_width=True
+        )
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 5 : IDP OCR CROSS-CHECKING
+# TAB 6 : IDP OCR CROSS-CHECKING
 # =========================================================
 with tab_ocr:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-    st.subheader("📄 Module 5 : IDP OCR & Cross-Checking des Pièces Jointes")
-    st.caption("Détection automatique des tentatives de sous-évaluation douanière")
+    st.subheader("📄 IDP OCR & Cross-Checking Documentaire")
 
     f_ocr = st.file_uploader("Joindre la Facture Commerciale PDF/Image", type=["pdf", "png", "jpg", "txt"])
     if f_ocr:
-        st.success("Facture scannée. Extraction des métadonnées terminée.")
+        st.success("Facture scannée. Extraction automatique des métadonnées terminée.")
         col_oc1, col_oc2 = st.columns(2)
         with col_oc1:
             st.metric("Montant Extrait sur Facture OCR", "$ 25,000 USD")
-            st.metric("Poids Brut Extrait", "1,500.0 kg")
+            st.metric("Poids Brut Extrait sur Connaissement", "1,500.0 kg")
         with col_oc2:
             st.metric("Montant Déclaré par le Déclarant", "$ 20,000 USD")
             st.error("⚠️ ALERTE DISCORDANCE : Sous-évaluation détectée (-20.0%) ! Dossier basculé en CIRCUIT ROUGE.")
@@ -728,11 +863,11 @@ with tab_ocr:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 6 : CODE DES DOUANES IVOIRIEN
+# TAB 7 : CODE DES DOUANES
 # =========================================================
 with tab_code:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-    st.subheader("📖 Référentiel Juridique du Code des Douanes de Côte d'Ivoire")
+    st.subheader("📖 Code des Douanes de Côte d'Ivoire")
 
     articles_code = {
         "Article 12 - Valeur transactionnelle (OMC / CAF)": "La valeur en douane est la valeur transactionnelle constituée du prix payé ajusté des frais de transport et d'assurance jusqu'au port d'Abidjan ou de San-Pédro.",
@@ -741,7 +876,7 @@ with tab_code:
         "Programme VOC / CoC (Inspection Webb Fontaine & Cotecna)": "Tout produit d'une valeur FOB >= 1 000 000 FCFA requiert une Attestation de Vérification Documentaire (AVD) et un Certificat de Conformité."
     }
 
-    st.text_input("🔍 Chercher un article du Code des Douanes...")
+    st.text_input("🔍 Recherche rapide dans les textes de loi...")
     for t, c in articles_code.items():
         with st.expander(t):
             st.write(c)
@@ -749,18 +884,18 @@ with tab_code:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 7 : ASSISTANT IA DOUANIER
+# TAB 8 : ASSISTANT IA TRANSIT & DOUANES
 # =========================================================
 with tab_ai:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-    st.subheader("🤖 Assistant Virtuel Douanier (Intelligence Artificielle Llama 3)")
-    u_q = st.text_area("Posez votre question réglementaire :")
+    st.subheader("🤖 Assistant Virtuel Llama 3 (Spécialiste Douanes & Transit)")
+    u_q = st.text_area("Votre question réglementaire ou logistique :", value="Comment calculer les débours et la TVA sur honoraires pour un transitaire en Côte d'Ivoire ?")
 
-    if st.button("🔍 Consulter l'Expert IA"):
+    if st.button("🔍 Consulter l'IA", use_container_width=True):
         if groq_api_key and Groq:
             try:
                 client_ai = Groq(api_key=groq_api_key)
-                prompt_expert = f"Vous êtes un expert des douanes nationales de Côte d'Ivoire. Répondez : {u_q}"
+                prompt_expert = f"Vous êtes un expert en douanes et transit international en Côte d'Ivoire. Répondez de façon claire : {u_q}"
                 res_ai = client_ai.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=[{"role": "user", "content": prompt_expert}],
@@ -771,23 +906,23 @@ with tab_ai:
             except Exception as e:
                 st.error(f"Erreur Groq : {e}")
         else:
-            st.warning("Renseignez la clé API Groq dans le panneau latéral.")
+            st.warning("Renseignez la clé API Groq dans le panneau latéral pour activer l'assistant.")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 8 : ADMIN & AUDIT LOGS
+# TAB 9 : ADMIN & AUDIT LOGS
 # =========================================================
 if st.session_state.user_role in ["Administrateur Système", "Administrateur"]:
     with tab_admin:
         st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
-        st.subheader("🔐 Journal d'Audit & Gestion des Comptes Agents")
+        st.subheader("🔐 Gestion des Comptes & Journal d'Audit")
 
         col_ad1, col_ad2 = st.columns(2)
         with col_ad1:
-            st.markdown("##### 1️⃣ Créer un Compte Agent")
+            st.markdown("##### 1️⃣ Créer un Compte Agent / Déclarant")
             with st.form("form_agent"):
-                a_name = st.text_input("Identifiant Agent")
+                a_name = st.text_input("Identifiant")
                 a_pwd = st.text_input("Mot de passe", type="password")
                 a_role = st.selectbox("Rôle Fonctionnel", ["Vérificateur Douanier", "Agent de Caisse", "Commissionnaire Agréé"])
                 btn_ag = st.form_submit_button("Créer le Compte")
@@ -799,21 +934,21 @@ if st.session_state.user_role in ["Administrateur Système", "Administrateur"]:
                     cursor.execute("INSERT INTO users (username, password_hash, role, statut) VALUES (?, ?, ?, 'Actif')",
                                    (a_name, hash_password(a_pwd), a_role))
                     conn.commit()
-                    log_action(st.session_state.username, "Création Agent", f"Compte {a_name} créé")
-                    st.success(f"Compte {a_name} créé !")
+                    log_action(st.session_state.username, "Création Utilisateur", f"Compte {a_name} créé")
+                    st.success(f"Compte '{a_name}' créé avec succès !")
                 except Exception as e:
                     st.error(f"Erreur : {e}")
                 conn.close()
 
         with col_ad2:
-            st.markdown("##### 2️⃣ Registre des Agents")
+            st.markdown("##### 2️⃣ Utilisateurs Enregistrés")
             conn = sqlite3.connect(DB_NAME)
             df_u = pd.read_sql_query("SELECT id, username, role, statut FROM users", conn)
             conn.close()
             st.dataframe(df_u, use_container_width=True)
 
         st.markdown("---")
-        st.markdown("### 📜 Journal National d'Audit (`audit_logs`)")
+        st.markdown("### 📜 Traces d'Audit (`audit_logs`)")
         conn = sqlite3.connect(DB_NAME)
         df_logs = pd.read_sql_query("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 100", conn)
         conn.close()
