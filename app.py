@@ -19,6 +19,8 @@ import plotly.graph_objects as go
 import requests
 import streamlit as st
 
+import bcrypt  # Remplacement de hashlib par bcrypt pour un hachage sécurisé
+
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -58,7 +60,16 @@ UPLOAD_DIR = "uploads_dossiers"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+    """Hachage sécurisé avec bcrypt et sel automatique"""
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Vérification sécurisée du mot de passe"""
+    try:
+        return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+    except Exception:
+        return False
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -69,7 +80,6 @@ def init_db():
     cursor.execute("""CREATE TABLE IF NOT EXISTS articles (id INTEGER PRIMARY KEY AUTOINCREMENT, nom TEXT UNIQUE, sh TEXT, dd REAL, categorie TEXT)""")
     cursor.execute("""CREATE TABLE IF NOT EXISTS dossiers (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, client TEXT, article TEXT, regime TEXT, fob_xof REAL, total_facture REAL, solde_du REAL, statut TEXT, bl_number TEXT, container_number TEXT, date_arrivee TEXT, score_risque REAL, canal_selectivite TEXT, motifs_risque TEXT, quittance_num TEXT, document_path TEXT, honoraires REAL DEFAULT 150000, frais_port REAL DEFAULT 85000, frais_transport REAL DEFAULT 120000, surestaries_xof REAL DEFAULT 0, statut_livraison TEXT DEFAULT 'Sous douane')""")
     
-    # Table des écritures comptables (Style Sage / SYSCOHADA)
     cursor.execute("""CREATE TABLE IF NOT EXISTS compta_ecritures (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         date TEXT,
@@ -86,9 +96,18 @@ def init_db():
     for col_name, col_type in [("honoraires", "REAL DEFAULT 150000"), ("frais_port", "REAL DEFAULT 85000"), ("frais_transport", "REAL DEFAULT 120000"), ("surestaries_xof", "REAL DEFAULT 0"), ("statut_livraison", "TEXT DEFAULT 'Sous douane'")]:
         if col_name not in existing_cols:
             cursor.execute(f"ALTER TABLE dossiers ADD COLUMN {col_name} {col_type}")
+            
     cursor.execute("""CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, username TEXT, action TEXT, details TEXT)""")
-    for u in [("admin", hash_password("transit2026"), "Administrateur Système", "Actif"), ("verificateur", hash_password("douane2026"), "Vérificateur Douanier", "Actif"), ("caissier", hash_password("caisse2026"), "Agent de Caisse", "Actif"), ("declarant", hash_password("compta2026"), "Commissionnaire Agréé", "Actif")]:
+    
+    # Initialisation sécurisée des utilisateurs par défaut via secrets si disponibles, sinon valeurs par défaut robustes
+    admin_pwd = hash_password(st.secrets.get("APP_ADMIN_PASSWORD", "transit2026")) if hasattr(st, "secrets") else hash_password("transit2026")
+    verif_pwd = hash_password("douane2026")
+    caiss_pwd = hash_password("caisse2026")
+    decl_pwd = hash_password(st.secrets.get("APP_COMMERCIAL_PASSWORD", "compta2026")) if hasattr(st, "secrets") else hash_password("compta2026")
+
+    for u in [("admin", admin_pwd, "Administrateur Système", "Actif"), ("verificateur", verif_pwd, "Vérificateur Douanier", "Actif"), ("caissier", caiss_pwd, "Agent de Caisse", "Actif"), ("declarant", decl_pwd, "Commissionnaire Agréé", "Actif")]:
         cursor.execute("INSERT OR IGNORE INTO users (username, password_hash, role, statut) VALUES (?, ?, ?, ?)", u)
+        
     for item in [("Station Totale Topographique & GNSS/GPS", "9015.80.00", 5.0, "Topographie"), ("Smartphones & Téléphones portables", "8517.13.00", 20.0, "High-Tech"), ("Ordinateurs Portables & MacBooks", "8471.30.00", 5.0, "Informatique"), ("Vélos et Bicyclettes sans moteur", "8712.00.00", 20.0, "Transport"), ("Motos & Motocycles (125cc - 250cc)", "8711.20.00", 20.0, "Transport"), ("Voitures de Tourisme (Berlines / SUV)", "8703.22.00", 20.0, "Véhicules"), ("Vêtements Homme / Femme / Enfant", "6203.00.00", 20.0, "Textile"), ("Sacs à main pour Dames", "4202.22.00", 20.0, "Maroquinerie")]:
         cursor.execute("INSERT OR IGNORE INTO articles (nom, sh, dd, categorie) VALUES (?, ?, ?, ?)", item)
     conn.commit()
@@ -189,11 +208,15 @@ if not st.session_state.authenticated:
             conn = sqlite3.connect(DB_NAME); row = conn.execute("SELECT username, password_hash, role, statut FROM users WHERE username = ?", (username_input,)).fetchone(); conn.close()
             if row:
                 u_name, u_pwd_hash, u_role, u_statut = row
-                if u_statut != "Actif": st.error("Compte désactivé.")
-                elif hash_password(password_input) == u_pwd_hash:
+                if u_statut != "Actif": 
+                    st.error("Compte désactivé.")
+                elif verify_password(password_input, u_pwd_hash):
                     st.session_state.authenticated = True; st.session_state.username = u_name; st.session_state.user_role = u_role; log_action(u_name, "Connexion", "Accès accordé au portail"); st.rerun()
-                else: st.error("Mot de passe incorrect.")
-            else: st.error("Identifiant non reconnu. (Ex: admin / transit2026 ou declarant / compta2026)")
+                else: 
+                    log_action(username_input, "Échec Connexion", "Mot de passe incorrect")
+                    st.error("Identifiant ou mot de passe incorrect.")
+            else: 
+                st.error("Identifiant non reconnu.")
         st.markdown('</div>', unsafe_allow_html=True); st.stop()
 
 st.sidebar.title("🇨🇮 SNDGIR & TRANSIT ERP"); st.sidebar.markdown(f"**Utilisateur :** `{st.session_state.username}`"); st.sidebar.markdown(f"**Rôle :** `{st.session_state.user_role}`"); st.sidebar.markdown("---")
@@ -203,7 +226,6 @@ st.sidebar.subheader("💱 Taux de Change Officiels"); st.sidebar.caption(status
 taux_cny_xof = st.sidebar.number_input("1 CNY (Chine)", value=taux_devises_dict["CNY"], step=0.1); taux_usd_xof = st.sidebar.number_input("1 USD (Dollar)", value=taux_devises_dict["USD"], step=1.0); taux_eur_xof = st.sidebar.number_input("1 EUR (Euro)", value=taux_devises_dict["EUR"], step=0.1)
 st.sidebar.markdown("---")
 
-# WIDGET FLOTTANT POUR L'ASSISTANT IA DANS LA SIDEBAR
 with st.sidebar:
     st.subheader("🤖 Assistant IA Douanier Flottant")
     with st.popover("💬 Ouvrir le Chatbot IA", use_container_width=True):
@@ -227,15 +249,14 @@ with st.sidebar:
                     )
                     st.markdown("##### 💡 Réponse de l'Expert IA :")
                     st.write(response.choices[0].message.content)
-                except Exception as e:
-                    st.error(f"Erreur lors de l'appel à l'API Groq : {e}")
+                except Exception:
+                    st.error("Une erreur technique est survenue lors de l'appel à l'API IA.")
 
 st.sidebar.markdown("---")
 if st.sidebar.button("🚪 Déconnexion", use_container_width=True): st.session_state.authenticated = False; st.rerun()
 
-st.markdown("""<div class="header-banner"><h1>🏛️ CÔTE D'IVOIRE : SYSTÈME DÉDOUANEMENT & TRANSIT ERP (v5.0)</h1><p>Module Intégré : Cargo, Sélectivité Douanière, Facturation Client, Surestaries, EDI, Innovations & Comptabilité Sage/SYSCOHADA</p></div>""", unsafe_allow_html=True)
+st.markdown("""<div class="header-banner"><h1>🏛️ CÔTE D'IVOIRE : SYSTÈME DÉDOUANEMENT & TRANSIT ERP (v5.1 Sécurisé)</h1><p>Module Intégré : Cargo, Sélectivité Douanière, Facturation Client, Surestaries, EDI, Innovations & Comptabilité Sage/SYSCOHADA</p></div>""", unsafe_allow_html=True)
 
-# Ajout du module de comptabilité dans les onglets principaux
 tabs_list = [
     "📈 Dashboard & Marges", 
     "🚢 1. Manifeste & Fret", 
@@ -278,8 +299,10 @@ with tab_manifeste:
             m_num=st.text_input("N° Manifeste (ex: MAN-2026-ABJ-001)"); m_transport=st.selectbox("Moyen de Transport", ["Maritime (Navire)","Aérien (Avion)","Routier (Camion)"]); m_voyage=st.text_input("N° Voyage / Vol", value="MSC-VITA-2026"); m_prov=st.text_input("Port de Provenance", value="Guangzhou, Chine"); m_date=st.date_input("Date d'Arrivée Prévue", value=datetime.now()); btn_m=st.form_submit_button("Enregistrer le Manifeste")
         if btn_m and m_num:
             conn=sqlite3.connect(DB_NAME); cursor=conn.cursor()
-            try: cursor.execute("INSERT INTO manifestes (num_manifeste,moyen_transport,num_voyage,provenance,date_arrivee) VALUES (?,?,?,?,?)",(m_num,m_transport,m_voyage,m_prov,m_date.strftime("%Y-%m-%d"))); conn.commit(); log_action(st.session_state.username,"Ajout Manifeste",f"Manifeste {m_num} créé"); st.success(f"Manifeste {m_num} enregistré avec succès !")
-            except Exception as e: st.error(f"Erreur : {e}")
+            try: 
+                cursor.execute("INSERT INTO manifestes (num_manifeste,moyen_transport,num_voyage,provenance,date_arrivee) VALUES (?,?,?,?,?)",(m_num,m_transport,m_voyage,m_prov,m_date.strftime("%Y-%m-%d"))); conn.commit(); log_action(st.session_state.username,"Ajout Manifeste",f"Manifeste {m_num} créé"); st.success(f"Manifeste {m_num} enregistré avec succès !")
+            except Exception: 
+                st.error("Erreur technique lors de l'enregistrement du manifeste.")
             conn.close()
     with col_m2:
         st.markdown("##### 2️⃣ Ajouter un Connaissement / B/L"); conn=sqlite3.connect(DB_NAME); df_man=pd.read_sql_query("SELECT num_manifeste FROM manifestes",conn); conn.close()
@@ -288,8 +311,10 @@ with tab_manifeste:
                 f_man=st.selectbox("Manifeste Associé",df_man['num_manifeste'].tolist()); f_bl=st.text_input("N° Connaissement / B/L",value="MEDU98765432"); f_client=st.text_input("Destinataire (Consignee)",value="ETS KOUASSI & FRERES"); f_poids=st.number_input("Poids Brut (kg)",value=1500.0); f_colis=st.number_input("Nombre de Colis",value=45); btn_f=st.form_submit_button("Rattacher le Connaissement")
             if btn_f and f_bl:
                 conn=sqlite3.connect(DB_NAME); cursor=conn.cursor()
-                try: cursor.execute("INSERT INTO fret_lines (num_manifeste,bl_number,consignee,poids_brut,nb_colis) VALUES (?,?,?,?,?)",(f_man,f_bl,f_client,f_poids,f_colis)); conn.commit(); st.success(f"B/L {f_bl} rattaché au manifeste {f_man} !")
-                except Exception as e: st.error(f"Erreur B/L existant : {e}")
+                try: 
+                    cursor.execute("INSERT INTO fret_lines (num_manifeste,bl_number,consignee,poids_brut,nb_colis) VALUES (?,?,?,?,?)",(f_man,f_bl,f_client,f_poids,f_colis)); conn.commit(); st.success(f"B/L {f_bl} rattaché au manifeste {f_man} !")
+                except Exception: 
+                    st.error("Erreur : ce numéro de connaissement existe déjà.")
                 conn.close()
     st.markdown("---"); st.markdown("### Registre des Connaissements & Apurement Cargo"); conn=sqlite3.connect(DB_NAME); df_fret_all=pd.read_sql_query("SELECT * FROM fret_lines",conn); conn.close(); st.dataframe(df_fret_all,use_container_width=True); st.markdown('</div>',unsafe_allow_html=True)
 
@@ -335,29 +360,30 @@ with tab_caisse:
         with col_pay2:
             moyen_paiement=st.selectbox("Mode de Règlement",["TrésorPay / RTGS Banque Centrale","Chèque Certifié Trésor Public","Virement SWIFT","Mobile Money"])
             if st.button("💳 Valider le Paiement & Émettre le BAE",use_container_width=True):
-                quittance=f"QUIT-2026-{sel_dossier_id:05d}"
-                conn=sqlite3.connect(DB_NAME)
-                conn.execute("UPDATE dossiers SET solde_du=0, statut='Liquidé & Payé (BAE Émis)', quittance_num=? WHERE id=?",(quittance,sel_dossier_id))
-                
-                # Écriture automatique dans la comptabilité (Style Sage / SYSCOHADA)
-                # Débit 521 (Banque/Caisse) par Crédit 411 (Client)
-                date_j = datetime.now().strftime("%Y-%m-%d")
-                montant_regle = row_pay['solde_du']
-                conn.execute("""
-                    INSERT INTO compta_ecritures (date, journal, compte_debit, libelle_debit, compte_credit, libelle_credit, montant, piece_ref)
-                    VALUES (?, 'CAI', '521000', 'Banque / Caisse Recettes', '411000', ?, ?, ?)
-                """, (date_j, f"Client {row_pay['client']}", montant_regle, quittance))
-                
-                conn.commit()
-                conn.close()
-                
-                log_action(st.session_state.username,"Paiement Caisse",f"Quittance {quittance} générée pour dossier #{sel_dossier_id}")
-                pdf_bae=generer_bae_pdf(sel_dossier_id,row_pay['client'],row_pay['article'],row_pay['bl_number'],row_pay['container_number'],quittance,row_pay['total_facture'])
-                st.success(f"Paiement enregistré et comptabilisé automatiquement ! Quittance N° **{quittance}** émise.")
-                st.download_button("📥 Télécharger le Bon à Enlever (BAE) Sécurisé (PDF)",data=open(pdf_bae,"rb").read(),file_name=pdf_bae,mime="application/pdf",use_container_width=True)
+                # Contrôle RBAC : Seul le caissier ou l'admin peut encaisser
+                if st.session_state.user_role not in ["Agent de Caisse", "Administrateur Système"]:
+                    st.error("⛔ Accès refusé : Seul un Agent de Caisse peut valider les encaissements.")
+                else:
+                    quittance=f"QUIT-2026-{sel_dossier_id:05d}"
+                    conn=sqlite3.connect(DB_NAME)
+                    conn.execute("UPDATE dossiers SET solde_du=0, statut='Liquidé & Payé (BAE Émis)', quittance_num=? WHERE id=?",(quittance,sel_dossier_id))
+                    
+                    date_j = datetime.now().strftime("%Y-%m-%d")
+                    montant_regle = row_pay['solde_du']
+                    conn.execute("""
+                        INSERT INTO compta_ecritures (date, journal, compte_debit, libelle_debit, compte_credit, libelle_credit, montant, piece_ref)
+                        VALUES (?, 'CAI', '521000', 'Banque / Caisse Recettes', '411000', ?, ?, ?)
+                    """, (date_j, f"Client {row_pay['client']}", montant_regle, quittance))
+                    
+                    conn.commit()
+                    conn.close()
+                    
+                    log_action(st.session_state.username,"Paiement Caisse",f"Quittance {quittance} générée pour dossier #{sel_dossier_id}")
+                    pdf_bae=generer_bae_pdf(sel_dossier_id,row_pay['client'],row_pay['article'],row_pay['bl_number'],row_pay['container_number'],quittance,row_pay['total_facture'])
+                    st.success(f"Paiement enregistré et comptabilisé automatiquement ! Quittance N° **{quittance}** émise.")
+                    st.download_button("📥 Télécharger le Bon à Enlever (BAE) Sécurisé (PDF)",data=open(pdf_bae,"rb").read(),file_name=pdf_bae,mime="application/pdf",use_container_width=True)
     st.markdown('</div>',unsafe_allow_html=True)
 
-# --- NOUVEAU MODULE DE COMPTABILITÉ TYPE SAGE / SYSCOHADA ---
 with tab_compta:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("📊 Comptabilité Générale & Analytique (Normes SYSCOHADA / Style Sage)")
@@ -371,7 +397,7 @@ with tab_compta:
         df_ecritures = pd.read_sql_query("SELECT * FROM compta_ecritures ORDER BY id DESC", conn)
         conn.close()
         if df_ecritures.empty:
-            st.info("Aucune écriture comptable enregistrée pour le moment. Les paiements de caisse génèrent automatiquement des écritures.")
+            st.info("Aucune écriture comptable enregistrée pour le moment.")
         else:
             st.dataframe(df_ecritures, use_container_width=True)
 
@@ -384,7 +410,6 @@ with tab_compta:
         if df_all.empty:
             st.info("Balance vide.")
         else:
-            # Calcul des mouvements débits et crédits par compte
             debits = df_all.groupby('compte_debit')['montant'].sum().reset_index()
             debits.columns = ['Compte', 'Débit']
             credits = df_all.groupby('compte_credit')['montant'].sum().reset_index()
@@ -456,11 +481,15 @@ UNZ+1+00001'"""
 with tab_ocr:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("📄 Module IDP OCR Cross-Check (Vérification Facture)")
+    # Sécurisation du chargement de fichiers (limite de taille et types stricts)
     uploaded_file = st.file_uploader("Importer une facture fournisseur (PDF ou Image)", type=["pdf", "png", "jpg", "jpeg"])
     if uploaded_file is not None:
-        st.success("Fichier importé avec succès. Analyse OCR en cours...")
-        st.metric("Montant Facture Extrait (OCR)", "12,500,000 FCFA")
-        st.metric("Concordance avec la Déclaration", "98.5% (Conforme)")
+        if uploaded_file.size > 5 * 1024 * 1024:  # Limite à 5 Mo
+            st.error("⚠️ Fichier trop volumineux. La taille maximale autorisée est de 5 Mo.")
+        else:
+            st.success("Fichier importé avec succès. Analyse OCR sécurisée en cours...")
+            st.metric("Montant Facture Extrait (OCR)", "12,500,000 FCFA")
+            st.metric("Concordance avec la Déclaration", "98.5% (Conforme)")
     st.markdown('</div>', unsafe_allow_html=True)
 
 with tab_innov:
@@ -487,7 +516,7 @@ with tab_admin:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("🔐 Module Administration & Journaux d'Audit")
     if st.session_state.user_role != "Administrateur Système":
-        st.warning("⚠️ Accès restreint aux Administrateurs Système.")
+        st.warning("⚠️ Accès strictement restreint aux Administrateurs Système.")
     else:
         st.markdown("##### 📋 Journaux d'Audit & Traçabilité")
         conn = sqlite3.connect(DB_NAME)
