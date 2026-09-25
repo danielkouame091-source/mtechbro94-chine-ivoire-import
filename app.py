@@ -1,130 +1,11 @@
-import streamlit as st
-import sqlite3
-import pandas as pd
-from datetime import datetime
+cursor.execute("UPDATE fret_lines SET statut_apurement = 'Apuré' WHERE bl_number = ? AND tenant_id = ?", (bl_select, st.session_state.tenant_id))
+        conn.commit()
+        conn.close()
 
-# Configuration de la page Streamlit
-st.set_page_config(
-    page_title="SNDGIR SaaS - Transit Ivoire",
-    page_icon="🏛️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+        log_action(st.session_state.tenant_id, st.session_state.username, "Création SAD", f"Déclaration SAD créée pour {client_decl} - Canal {canal}")
+        st.success(f"Déclaration soumise avec succès ! Circuit attribué : CANAL {canal}")
 
-# Initialisation des variables de session si non existantes
-if 'tenant_id' not in st.session_state:
-    st.session_state.tenant_id = 1
-if 'tenant_name' not in st.session_state:
-    st.session_state.tenant_name = "Société Générale de Transit (SGT)"
-if 'username' not in st.session_state:
-    st.session_state.username = "Kouassi Daniel"
-
-# =========================================================
-# DESIGN CSS & BANNIÈRE PROFESSIONNELLE SAAS
-# =========================================================
-st.markdown("""
-<style>
-    /* Conteneur principal de la bannière avec effet de dégradé élégant et bordure lumineuse */
-    .saas-header-container {
-        background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F766E 100%);
-        border: 1px solid rgba(56, 189, 248, 0.2);
-        border-radius: 14px;
-        padding: 24px 30px;
-        margin-bottom: 25px;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
-        position: relative;
-        overflow: hidden;
-    }
-    
-    /* Effet de brillance subtil en arrière-plan */
-    .saas-header-container::before {
-        content: "";
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 300px;
-        height: 100%;
-        background: radial-gradient(circle, rgba(56, 189, 248, 0.15) 0%, transparent 70%);
-        pointer-events: none;
-    }
-
-    /* Titre principal avec police épurée et espacement parfait */
-    .saas-header-title {
-        font-size: 26px;
-        font-weight: 800;
-        color: #F8FAFC;
-        margin: 0;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        letter-spacing: -0.5px;
-    }
-
-    /* Sous-titre descriptif élégant */
-    .saas-header-subtitle {
-        font-size: 14px;
-        font-weight: 400;
-        color: #94A3B8;
-        margin-top: 8px;
-        margin-bottom: 0;
-        letter-spacing: 0.2px;
-    }
-
-    /* Badge de statut "Démo" ou "Production" moderne */
-    .saas-badge {
-        background-color: rgba(14, 165, 233, 0.15);
-        color: #38BDF8;
-        border: 1px solid rgba(56, 189, 248, 0.3);
-        padding: 4px 10px;
-        border-radius: 20px;
-        font-size: 11px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.8px;
-        margin-left: auto;
-    }
-    
-    .header-flex {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-</style>
-
-<div class="saas-header-container">
-    <div class="header-flex">
-        <div class="saas-header-title">
-            <span>🏛️</span> SNDGIR SaaS <span style="color: #38BDF8; font-weight: 400;">|</span> TRANSIT IVOIRE
-        </div>
-        <div class="saas-badge">Mode Démo</div>
-    </div>
-    <p class="saas-header-subtitle">
-        Gestion Intégrée Multi-Sociétés : Cargo, Douanes, ERP Transit, Portail Importateur & Intelligence Artificielle
-    </p>
-</div>
-""", unsafe_allow_html=True)
-
-# Simulation de variables ou fonctions pour que le code soit exécutable si besoin
-DB_NAME = "transit.db"
-taux_usd_xof = 600.0
-
-def calculer_surestaries(date_arrivee, franchises, taux_jour, taux_change):
-    return 3, 150.0, 90000.0, "3 jours de surestaries appliqués."
-
-def generer_facture_transit_pdf(*args):
-    return "facture_transit.pdf"
-
-def generer_bae_pdf(*args):
-    return "bae_officiel.pdf"
-
-def generer_message_edifact_cusdec(*args):
-    return "UNB+UNOA:1+SNDGIR+CUSTOMS+260925:1350+999'UNH+1+CUSDEC:D:96B:UN'"
-
-# Création des onglets principaux (ajustez selon votre code complet d'onglets)
-tab_transit_erp, tab_portail_client, tab_caisse, tab_edi, tab_ocr, tab_innov, tab_code, tab_ai, tab_admin = st.tabs([
-    "💼 ERP Transit", "📱 Portail Client", "💳 Caisse & BAE", "🔄 Passerelle EDI", 
-    "📄 IDP OCR", "🌐 Innovations", "📖 Code Douanes", "🤖 Assistant IA", "🔐 Administration"
-])
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
 # TAB 3 : TRANSIT ERP & FACTURATION
@@ -134,11 +15,7 @@ with tab_transit_erp:
     st.subheader("💼 ERP Transit & Gestion des Prestations Logistiques")
 
     conn = sqlite3.connect(DB_NAME)
-    # Assurez-vous que la table 'dossiers' existe ou gérez l'exception selon votre configuration
-    try:
-        df_dossiers = pd.read_sql_query("SELECT id, client, article, total_facture, surestaries_xof, statut_livraison FROM dossiers WHERE tenant_id = ?", conn, params=(st.session_state.tenant_id,))
-    except Exception:
-        df_dossiers = pd.DataFrame(columns=['id', 'client', 'article', 'total_facture', 'surestaries_xof', 'statut_livraison'])
+    df_dossiers = pd.read_sql_query("SELECT id, client, article, total_facture, surestaries_xof, statut_livraison FROM dossiers WHERE tenant_id = ?", conn, params=(st.session_state.tenant_id,))
     conn.close()
 
     if df_dossiers.empty:
@@ -154,6 +31,7 @@ with tab_transit_erp:
             f_transp = st.number_input("Frais de Transport Terrestre (FCFA)", value=120000.0)
             f_hon = st.number_input("Honoraires de Transit (FCFA)", value=150000.0)
             
+            # Calcul des surestaries automatiques basées sur la date d'arrivée
             jours_ret, cout_usd_surest, cout_xof_surest, msg_surest = calculer_surestaries(datetime.now().strftime("%Y-%m-%d"), 7, 150, taux_usd_xof)
             st.markdown(f"**Calcul Surestaries :** {msg_surest}")
 
@@ -180,10 +58,7 @@ with tab_portail_client:
     st.caption("Espace dédié aux PME et importateurs pour suivre leurs conteneurs en temps réel")
 
     conn = sqlite3.connect(DB_NAME)
-    try:
-        df_portail = pd.read_sql_query("SELECT id, client, article, bl_number, container_number, statut, canal_selectivite, document_path FROM dossiers WHERE tenant_id = ?", conn, params=(st.session_state.tenant_id,))
-    except Exception:
-        df_portail = pd.DataFrame(columns=['id', 'client', 'article', 'bl_number', 'container_number', 'statut', 'canal_selectivite', 'document_path'])
+    df_portail = pd.read_sql_query("SELECT id, client, article, bl_number, container_number, statut, canal_selectivite, document_path FROM dossiers WHERE tenant_id = ?", conn, params=(st.session_state.tenant_id,))
     conn.close()
 
     if df_portail.empty:
@@ -208,10 +83,7 @@ with tab_caisse:
     st.subheader("💳 Guichet Unique de Paiement & Émission BAE")
 
     conn = sqlite3.connect(DB_NAME)
-    try:
-        df_ca = pd.read_sql_query("SELECT id, client, article, total_facture, bl_number, container_number FROM dossiers WHERE tenant_id = ? AND statut LIKE '%Liquidé%'", conn, params=(st.session_state.tenant_id,))
-    except Exception:
-        df_ca = pd.DataFrame(columns=['id', 'client', 'article', 'total_facture', 'bl_number', 'container_number'])
+    df_ca = pd.read_sql_query("SELECT id, client, article, total_facture, bl_number, container_number FROM dossiers WHERE tenant_id = ? AND statut LIKE '%Liquidé%'", conn, params=(st.session_state.tenant_id,))
     conn.close()
 
     if df_ca.empty:
@@ -250,10 +122,7 @@ with tab_edi:
     st.caption("Génération automatique des messages EDIFACT normalisés pour les douanes nationales")
 
     conn = sqlite3.connect(DB_NAME)
-    try:
-        df_edi = pd.read_sql_query("SELECT id, client, article, fob_xof, regime FROM dossiers WHERE tenant_id = ?", conn, params=(st.session_state.tenant_id,))
-    except Exception:
-        df_edi = pd.DataFrame(columns=['id', 'client', 'article', 'fob_xof', 'regime'])
+    df_edi = pd.read_sql_query("SELECT id, client, article, fob_xof, regime FROM dossiers WHERE tenant_id = ?", conn, params=(st.session_state.tenant_id,))
     conn.close()
 
     if not df_edi.empty:
@@ -328,8 +197,16 @@ with tab_ai:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
     st.subheader("🤖 Assistant Virtuel Intelligent (Propulsé par Llama 3)")
     prompt_ai = st.text_input("Posez votre question sur la réglementation douanière ou la logistique :")
-    if prompt_ai:
-        st.info("Traitement de la requête par l'assistant virtuel...")
+    if prompt_ai and groq_api_key and Groq:
+        try:
+            client_groq = Groq(api_key=groq_api_key)
+            completion = client_groq.chat.completions.create(
+                model="llama3-70b-8192",
+                messages=[{"role": "user", "content": prompt_ai}]
+            )
+            st.markdown(completion.choices[0].message.content)
+        except Exception as e:
+            st.error(f"Erreur avec l'API Groq : {e}")
     st.markdown('</div>', unsafe_allow_html=True)
 
 with tab_admin:
@@ -338,10 +215,7 @@ with tab_admin:
     st.write(f"Connecté en tant qu'administrateur de l'entreprise : **{st.session_state.tenant_name}**")
     
     conn = sqlite3.connect(DB_NAME)
-    try:
-        df_tenants = pd.read_sql_query("SELECT * FROM tenants", conn)
-    except Exception:
-        df_tenants = pd.DataFrame(columns=['id', 'nom_entreprise', 'statut'])
+    df_tenants = pd.read_sql_query("SELECT * FROM tenants", conn)
     conn.close()
     st.dataframe(df_tenants, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
