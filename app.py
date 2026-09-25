@@ -84,7 +84,7 @@ st.markdown(
 )
 
 # =========================================================
-# BASE DE DONNÉES SQLITE - ARCHITECTURE DOUANES & TRANSIT
+# BASE DE DONNÉES SQLITE - ARCHITECTURE DOUBLE FLUX & MIGRATION
 # =========================================================
 DB_NAME = "sndgir_national_customs.db"
 UPLOAD_DIR = "uploads_dossiers"
@@ -172,6 +172,19 @@ def init_db():
             statut_livraison TEXT DEFAULT 'Sous douane'
         )
     """)
+
+    # AUTO-MIGRATION : Ajout dynamique des colonnes manquantes
+    existing_cols = [col[1] for col in cursor.execute("PRAGMA table_info(dossiers)").fetchall()]
+    new_cols = [
+        ("honoraires", "REAL DEFAULT 150000"),
+        ("frais_port", "REAL DEFAULT 85000"),
+        ("frais_transport", "REAL DEFAULT 120000"),
+        ("surestaries_xof", "REAL DEFAULT 0"),
+        ("statut_livraison", "TEXT DEFAULT 'Sous douane'")
+    ]
+    for col_name, col_type in new_cols:
+        if col_name not in existing_cols:
+            cursor.execute(f"ALTER TABLE dossiers ADD COLUMN {col_name} {col_type}")
 
     # Table Traces d'Audit
     cursor.execute("""
@@ -690,7 +703,7 @@ with tab_sad:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
-# TAB 3 : TRANSIT ERP & FACTURATION CLIENT
+# TAB 3 : TRANSIT ERP & FACTURATION CLIENT (LECTURE SÉCURISÉE)
 # =========================================================
 with tab_transit_erp:
     st.markdown('<div class="custom-card-3d">', unsafe_allow_html=True)
@@ -736,10 +749,15 @@ with tab_transit_erp:
 
         with col_tr2:
             st.markdown("##### 💰 Éléments de Facturation Transitaire")
-            d_douane = row_t['total_facture']
-            f_port = st.number_input("Frais de Passage Portuaire & Acconage (FCFA)", value=row_t['frais_port'])
-            f_transport = st.number_input("Frais de Transport Terrestre / Camionnage (FCFA)", value=row_t['frais_transport'])
-            f_honoraires = st.number_input("Honoraires / Commission de Transit (FCFA)", value=row_t['honoraires'])
+            d_douane = float(row_t['total_facture']) if 'total_facture' in row_t and pd.notna(row_t['total_facture']) else 0.0
+
+            val_f_port = float(row_t['frais_port']) if 'frais_port' in row_t and pd.notna(row_t['frais_port']) else 85000.0
+            val_f_transport = float(row_t['frais_transport']) if 'frais_transport' in row_t and pd.notna(row_t['frais_transport']) else 120000.0
+            val_f_honoraires = float(row_t['honoraires']) if 'honoraires' in row_t and pd.notna(row_t['honoraires']) else 150000.0
+
+            f_port = st.number_input("Frais de Passage Portuaire & Acconage (FCFA)", value=val_f_port)
+            f_transport = st.number_input("Frais de Transport Terrestre / Camionnage (FCFA)", value=val_f_transport)
+            f_honoraires = st.number_input("Honoraires / Commission de Transit (FCFA)", value=val_f_honoraires)
 
             tva_honoraires = f_honoraires * 0.18
             total_facture_globale = d_douane + f_port + f_transport + c_xof + f_honoraires + tva_honoraires
